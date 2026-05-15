@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: fbr-z-backend
+    runtime: node
+    rootDir: apps/backend
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: ADMIN_EMAIL
+        value: admin@fbr.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_FULL_NAME
+        value: Admin
+      - key: ADMIN_WORKSPACE_NAME
+        value: Admin Workspace
+      - key: ALLOW_DEV_ADMIN_LOGIN
+        value: "true"
+      - key: FBR_BASE_URL
+        value: https://gw.fbr.gov.pk
+      - key: FBR_ENVIRONMENT
+        value: sandbox
+      - key: FBR_REFERENCE_USE_MOCKS
+        value: "true"
+      - key: FBR_INVOICE_USE_MOCKS
+        value: "true"
+      - key: FBR_SETTINGS_ENCRYPTION_KEY
+        sync: false
+      - key: FBR_REFERENCE_API_TOKEN
+        sync: false
+      - key: FBR_SANDBOX_TOKEN
+        sync: false
+      - key: FBR_PRODUCTION_TOKEN
+        sync: false
+      - key: FBR_REFERENCE_INVOICE_LOOKUP_URL
+        sync: false
+      - key: FBR_OUTBOUND_IP
+        sync: false

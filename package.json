@@ -1,0 +1,12 @@
+{
+  "name": "fbr-z-einvoicing",
+  "private": true,
+  "scripts": {
+    "frontend:dev": "npm --prefix apps/frontend start",
+    "frontend:build": "npm --prefix apps/frontend run build",
+    "backend:dev": "npm --prefix apps/backend run dev",
+    "backend:build": "npm --prefix apps/backend run build",
+    "backend:start": "npm --prefix apps/backend run start"
+  }
+}
+

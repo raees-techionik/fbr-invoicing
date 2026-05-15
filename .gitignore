@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+generated/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+.data/
+*.log
+*.err.log
+cache.json
+
+# Test / temp artifacts
+coverage/
+.tmp/
+tmp/
+temp/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Office temporary lock files
+~$*
+

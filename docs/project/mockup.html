@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FBR Z — UI Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: {
+            brand: { 50:'#eef2ff', 100:'#e0e7ff', 500:'#6366f1', 600:'#4f46e5', 700:'#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .nav-item { transition: all .15s ease; }
+    .nav-item:hover { background: rgba(255,255,255,.08); }
+    .nav-item.active { background: rgba(99,102,241,.25); border-left: 3px solid #6366f1; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .stat-card { transition: transform .2s ease, box-shadow .2s ease; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,.08); }
+    .table-row:hover { background: #f8fafc; }
+    .badge { display:inline-flex; align-items:center; padding: 2px 10px; border-radius:9999px; font-size:11px; font-weight:600; letter-spacing:.02em; }
+    .badge-green  { background:#dcfce7; color:#15803d; }
+    .badge-red    { background:#fee2e2; color:#dc2626; }
+    .badge-yellow { background:#fef9c3; color:#a16207; }
+    .badge-gray   { background:#f1f5f9; color:#64748b; }
+    .badge-blue   { background:#dbeafe; color:#1d4ed8; }
+    ::-webkit-scrollbar { width:5px; } ::-webkit-scrollbar-track { background:#1e293b; } ::-webkit-scrollbar-thumb { background:#334155; border-radius:4px; }
+    .sidebar-scroll { overflow-y:auto; flex:1; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+<div class="flex h-screen overflow-hidden">
+
+  <!-- ─── SIDEBAR ─── -->
+  <aside class="w-64 bg-slate-900 flex flex-col flex-shrink-0 h-full">
+
+    <!-- Logo -->
+    <div class="px-5 py-5 border-b border-slate-700/50">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <div>
+          <p class="text-white font-semibold text-sm leading-none">FBR Z</p>
+          <p class="text-slate-400 text-xs mt-0.5">E-Invoicing Portal</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="sidebar-scroll px-3 py-4 space-y-0.5">
+      <p class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest px-3 mb-2">Main</p>
+
+      <button onclick="showPage('dashboard')" id="nav-dashboard" class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium border-l-0">
+        <svg class="w-4.5 h-4.5 w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </button>
+
+      <!-- Invoices group -->
+      <div>
+        <button onclick="showPage('invoices')" id="nav-invoices" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Invoices
+          <span class="ml-auto bg-brand-500/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">142</span>
+        </button>
+        <div class="ml-8 mt-0.5 space-y-0.5">
+          <button onclick="showPage('add-invoice')" id="nav-add-invoice" class="nav-item w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Add Invoice
+          </button>
+          <button class="nav-item w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Upload
+          </button>
+          <button onclick="showPage('offline')" id="nav-offline" class="nav-item w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728M12 12h.01"/></svg>
+            Offline Queue
+            <span class="ml-auto bg-red-500/20 text-red-400 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">3</span>
+          </button>
+        </div>
+      </div>
+
+      <p class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest px-3 mb-2 mt-4">Management</p>
+
+      <button onclick="showPage('customers')" id="nav-customers" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-5-5M9 20H4v-2a4 4 0 015-5m4 0a4 4 0 110-8 4 4 0 010 8z"/></svg>
+        Customers
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg>
+        Products
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Services
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"/></svg>
+        Staff
+      </button>
+
+      <p class="text-slate-500 text-[10px] font-semibold uppercase tracking-widest px-3 mb-2 mt-4">System</p>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+        Sandbox
+      </button>
+      <button onclick="showPage('settings')" id="nav-settings" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 text-sm font-medium">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+        Settings
+      </button>
+    </nav>
+
+    <!-- User footer -->
+    <div class="px-4 py-4 border-t border-slate-700/50">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-brand-500/20 flex items-center justify-center flex-shrink-0">
+          <span class="text-brand-400 text-xs font-bold">AT</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-white text-xs font-medium truncate">Admin</p>
+          <p class="text-slate-400 text-[10px] truncate">admin@techionik.com</p>
+        </div>
+        <button class="text-slate-500 hover:text-red-400 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── MAIN CONTENT ─── -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Top Bar -->
+    <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between flex-shrink-0">
+      <div id="breadcrumb" class="flex items-center gap-2 text-sm">
+        <span class="text-slate-400">FBR Z</span>
+        <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <span class="text-slate-700 font-medium" id="page-title">Dashboard</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Environment badge -->
+        <span class="badge badge-yellow">Sandbox Mode</span>
+        <!-- Notification bell -->
+        <button class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-9.33-5M13 21a2 2 0 01-4 0"/></svg>
+          <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+        </button>
+        <!-- Online status -->
+        <div class="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+          <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+          Online
+        </div>
+      </div>
+    </header>
+
+    <!-- Scrollable content -->
+    <main class="flex-1 overflow-y-auto bg-slate-50">
+
+      <!-- ══════════════════════════════════════════
+           PAGE: DASHBOARD
+      ══════════════════════════════════════════ -->
+      <div id="page-dashboard" class="page active p-6">
+
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-xl font-semibold text-slate-800">Dashboard</h1>
+            <p class="text-sm text-slate-400 mt-0.5">Tuesday, 13 May 2026</p>
+          </div>
+          <button onclick="showPage('add-invoice')" class="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            New Invoice
+          </button>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="stat-card bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Total Invoices</p>
+                <p class="text-3xl font-bold text-slate-800 mt-1">142</p>
+                <p class="text-xs text-slate-500 mt-1">Rs 4,87,200 total value</p>
+              </div>
+              <div class="w-10 h-10 bg-brand-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </div>
+            </div>
+            <div class="mt-3 flex items-center gap-1 text-emerald-600 text-xs font-medium">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+              12% from last month
+            </div>
+          </div>
+
+          <div class="stat-card bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Customers</p>
+                <p class="text-3xl font-bold text-slate-800 mt-1">38</p>
+                <p class="text-xs text-slate-500 mt-1">3 added this month</p>
+              </div>
+              <div class="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-5-5M9 20H4v-2a4 4 0 015-5m4 0a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </div>
+            </div>
+            <div class="mt-3 flex items-center gap-1 text-emerald-600 text-xs font-medium">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+              8% from last month
+            </div>
+          </div>
+
+          <div class="stat-card bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Products</p>
+                <p class="text-3xl font-bold text-slate-800 mt-1">24</p>
+                <p class="text-xs text-slate-500 mt-1">Across 6 HS categories</p>
+              </div>
+              <div class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg>
+              </div>
+            </div>
+            <div class="mt-3 flex items-center gap-1 text-slate-400 text-xs font-medium">
+              — unchanged
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart + Recent Section -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+
+          <!-- Chart card -->
+          <div class="col-span-2 bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-sm font-semibold text-slate-700">Invoice Revenue</h2>
+              <div class="flex gap-1">
+                <button class="text-xs px-3 py-1 bg-brand-600 text-white rounded-lg font-medium">Monthly</button>
+                <button class="text-xs px-3 py-1 text-slate-500 hover:bg-slate-100 rounded-lg font-medium">Weekly</button>
+              </div>
+            </div>
+            <!-- SVG Bar Chart Mock -->
+            <svg viewBox="0 0 560 160" class="w-full h-36" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#6366f1" stop-opacity="1"/>
+                  <stop offset="100%" stop-color="#6366f1" stop-opacity="0.4"/>
+                </linearGradient>
+              </defs>
+              <!-- Grid lines -->
+              <line x1="0" y1="130" x2="560" y2="130" stroke="#f1f5f9" stroke-width="1"/>
+              <line x1="0" y1="97"  x2="560" y2="97"  stroke="#f1f5f9" stroke-width="1"/>
+              <line x1="0" y1="65"  x2="560" y2="65"  stroke="#f1f5f9" stroke-width="1"/>
+              <line x1="0" y1="32"  x2="560" y2="32"  stroke="#f1f5f9" stroke-width="1"/>
+              <!-- Bars -->
+              <rect x="20"  y="90"  width="34" height="40" rx="4" fill="url(#barGrad)" opacity=".8"/>
+              <rect x="80"  y="70"  width="34" height="60" rx="4" fill="url(#barGrad)" opacity=".8"/>
+              <rect x="140" y="50"  width="34" height="80" rx="4" fill="url(#barGrad)"/>
+              <rect x="200" y="40"  width="34" height="90" rx="4" fill="url(#barGrad)"/>
+              <rect x="260" y="60"  width="34" height="70" rx="4" fill="url(#barGrad)" opacity=".8"/>
+              <rect x="320" y="20"  width="34" height="110" rx="4" fill="#4f46e5"/>
+              <rect x="380" y="45"  width="34" height="85" rx="4" fill="url(#barGrad)"/>
+              <rect x="440" y="75"  width="34" height="55" rx="4" fill="url(#barGrad)" opacity=".8"/>
+              <rect x="500" y="55"  width="34" height="75" rx="4" fill="url(#barGrad)"/>
+              <!-- Labels -->
+              <text x="37"  y="148" text-anchor="middle" font-size="9" fill="#94a3b8">Sep</text>
+              <text x="97"  y="148" text-anchor="middle" font-size="9" fill="#94a3b8">Oct</text>
+              <text x="157" y="148" text-anchor="middle" font-size="9" fill="#94a3b8">Nov</text>
+              <text x="217" y="148" text-anchor="middle" font-size="9" fill="#94a3b8">Dec</text>
+              <text x="277" y="148" text-anchor="middle" font-size="9" fill="#94a3b8">Jan</text>
+              <text x="337" y="148" text-anchor="middle" font-size="9" fill="#6366f1" font-weight="600">May</text>
+              <text x="397" y="148" text-anchor="middle" font-size="9" fill="#94a3b8">Mar</text>
+              <text x="457" y="148" text-anchor="middle" font-size="9" fill="#94a3b8">Apr</text>
+              <text x="517" y="148" text-anchor="middle" font-size="9" fill="#94a3b8">May</text>
+            </svg>
+          </div>
+
+          <!-- Top Customers -->
+          <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm">
+            <h2 class="text-sm font-semibold text-slate-700 mb-4">Top Customers</h2>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0"><span class="text-violet-600 text-[10px] font-bold">AL</span></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-medium text-slate-700 truncate">Al-Farooq Trading</p>
+                  <p class="text-[10px] text-slate-400">18 invoices</p>
+                </div>
+                <span class="text-xs font-semibold text-slate-600">Rs 92k</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0"><span class="text-amber-600 text-[10px] font-bold">ZE</span></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-medium text-slate-700 truncate">Zeeshan Enterprises</p>
+                  <p class="text-[10px] text-slate-400">12 invoices</p>
+                </div>
+                <span class="text-xs font-semibold text-slate-600">Rs 61k</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0"><span class="text-emerald-600 text-[10px] font-bold">NS</span></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-medium text-slate-700 truncate">National Suppliers</p>
+                  <p class="text-[10px] text-slate-400">9 invoices</p>
+                </div>
+                <span class="text-xs font-semibold text-slate-600">Rs 44k</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0"><span class="text-blue-600 text-[10px] font-bold">KT</span></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-medium text-slate-700 truncate">Karachi Textiles</p>
+                  <p class="text-[10px] text-slate-400">7 invoices</p>
+                </div>
+                <span class="text-xs font-semibold text-slate-600">Rs 31k</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0"><span class="text-rose-600 text-[10px] font-bold">PM</span></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-medium text-slate-700 truncate">Prime Merchants</p>
+                  <p class="text-[10px] text-slate-400">5 invoices</p>
+                </div>
+                <span class="text-xs font-semibold text-slate-600">Rs 18k</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Invoices Table -->
+        <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <h2 class="text-sm font-semibold text-slate-700">Recent Invoices</h2>
+            <button onclick="showPage('invoices')" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View all →</button>
+          </div>
+          <table class="w-full">
+            <thead><tr class="border-b border-slate-100">
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">FBR Invoice #</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Buyer</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Date</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Amount</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Status</th>
+            </tr></thead>
+            <tbody>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00142</td>
+                <td class="px-5 py-3 text-xs text-slate-600">Al-Farooq Trading</td>
+                <td class="px-5 py-3 text-xs text-slate-400">13 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 12,500</td>
+                <td class="px-5 py-3"><span class="badge badge-green">SUBMITTED</span></td>
+              </tr>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00141</td>
+                <td class="px-5 py-3 text-xs text-slate-600">Zeeshan Enterprises</td>
+                <td class="px-5 py-3 text-xs text-slate-400">12 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 8,200</td>
+                <td class="px-5 py-3"><span class="badge badge-yellow">DRAFT</span></td>
+              </tr>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00140</td>
+                <td class="px-5 py-3 text-xs text-slate-600">National Suppliers Ltd.</td>
+                <td class="px-5 py-3 text-xs text-slate-400">11 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 34,000</td>
+                <td class="px-5 py-3"><span class="badge badge-red">UPLOAD_FAILED</span></td>
+              </tr>
+              <tr class="table-row">
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00139</td>
+                <td class="px-5 py-3 text-xs text-slate-600">Karachi Textiles</td>
+                <td class="px-5 py-3 text-xs text-slate-400">10 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 5,750</td>
+                <td class="px-5 py-3"><span class="badge badge-green">SUBMITTED</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+      <!-- ══════════════════════════════════════════
+           PAGE: INVOICES LIST
+      ══════════════════════════════════════════ -->
+      <div id="page-invoices" class="page p-6">
+
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-xl font-semibold text-slate-800">Invoices</h1>
+            <p class="text-sm text-slate-400 mt-0.5">142 invoices total</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="flex items-center gap-2 text-slate-600 border border-slate-200 hover:bg-slate-50 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+              Bulk Upload
+            </button>
+            <button onclick="showPage('add-invoice')" class="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              New Invoice
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters row -->
+        <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm mb-4 p-4">
+          <div class="flex items-center gap-3">
+            <div class="flex-1 relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35"/></svg>
+              <input type="text" placeholder="Search by invoice #, buyer, NTN…" class="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+            </div>
+            <select class="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+              <option>All Status</option>
+              <option>Submitted</option>
+              <option>Draft</option>
+              <option>Failed</option>
+            </select>
+            <select class="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+              <option>All Types</option>
+              <option>B2B</option>
+              <option>B2C</option>
+            </select>
+            <button class="flex items-center gap-2 text-slate-500 border border-slate-200 hover:bg-slate-50 text-sm px-3 py-2 rounded-lg">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Date
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm">
+          <!-- Selection bar (appears when rows selected) -->
+          <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-brand-50 rounded-t-xl">
+            <div class="flex items-center gap-3">
+              <input type="checkbox" class="rounded border-slate-300 text-brand-600 w-4 h-4"/>
+              <span class="text-xs text-slate-600 font-medium">2 selected</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Download PDF
+              </button>
+              <button class="flex items-center gap-1.5 text-xs text-white bg-brand-600 hover:bg-brand-700 px-3 py-1.5 rounded-lg font-medium">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                Submit to FBR
+              </button>
+              <button class="text-xs text-red-500 hover:text-red-600 border border-red-200 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg font-medium">Delete</button>
+            </div>
+          </div>
+
+          <table class="w-full">
+            <thead><tr class="border-b border-slate-100">
+              <th class="px-5 py-3 w-8"></th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">FBR Invoice #</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Type</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Buyer</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Date</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Amount</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Status</th>
+              <th class="px-5 py-3"></th>
+            </tr></thead>
+            <tbody>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3"><input type="checkbox" checked class="rounded border-slate-300 text-brand-600 w-4 h-4"/></td>
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00142</td>
+                <td class="px-5 py-3"><span class="badge badge-blue">B2B</span></td>
+                <td class="px-5 py-3 text-xs text-slate-600">Al-Farooq Trading</td>
+                <td class="px-5 py-3 text-xs text-slate-400">13 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 12,500</td>
+                <td class="px-5 py-3"><span class="badge badge-green">SUBMITTED</span></td>
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-1">
+                    <button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors" title="View"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+                    <button class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3"><input type="checkbox" checked class="rounded border-slate-300 text-brand-600 w-4 h-4"/></td>
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00141</td>
+                <td class="px-5 py-3"><span class="badge badge-gray">B2C</span></td>
+                <td class="px-5 py-3 text-xs text-slate-600">Zeeshan Enterprises</td>
+                <td class="px-5 py-3 text-xs text-slate-400">12 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 8,200</td>
+                <td class="px-5 py-3"><span class="badge badge-yellow">DRAFT</span></td>
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-1">
+                    <button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+                    <button class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3"><input type="checkbox" class="rounded border-slate-300 text-brand-600 w-4 h-4"/></td>
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00140</td>
+                <td class="px-5 py-3"><span class="badge badge-blue">B2B</span></td>
+                <td class="px-5 py-3 text-xs text-slate-600">National Suppliers Ltd.</td>
+                <td class="px-5 py-3 text-xs text-slate-400">11 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 34,000</td>
+                <td class="px-5 py-3"><span class="badge badge-red">UPLOAD_FAILED</span></td>
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-1">
+                    <button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+                    <button class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+              <tr class="table-row">
+                <td class="px-5 py-3"><input type="checkbox" class="rounded border-slate-300 text-brand-600 w-4 h-4"/></td>
+                <td class="px-5 py-3 text-xs font-mono font-medium text-slate-700">FBR-2025-00139</td>
+                <td class="px-5 py-3"><span class="badge badge-blue">B2B</span></td>
+                <td class="px-5 py-3 text-xs text-slate-600">Karachi Textiles</td>
+                <td class="px-5 py-3 text-xs text-slate-400">10 May 2026</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 5,750</td>
+                <td class="px-5 py-3"><span class="badge badge-green">SUBMITTED</span></td>
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-1">
+                    <button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+                    <button class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Pagination -->
+          <div class="flex items-center justify-between px-5 py-3 border-t border-slate-100">
+            <span class="text-xs text-slate-400">Showing 1–10 of 142</span>
+            <div class="flex items-center gap-1">
+              <button class="px-3 py-1.5 text-xs text-slate-400 border border-slate-200 rounded-lg hover:bg-slate-50">Previous</button>
+              <button class="px-3 py-1.5 text-xs bg-brand-600 text-white rounded-lg font-medium">1</button>
+              <button class="px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">2</button>
+              <button class="px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">3</button>
+              <button class="px-3 py-1.5 text-xs text-slate-400 border border-slate-200 rounded-lg hover:bg-slate-50">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ══════════════════════════════════════════
+           PAGE: ADD INVOICE
+      ══════════════════════════════════════════ -->
+      <div id="page-add-invoice" class="page p-6">
+
+        <div class="flex items-center gap-3 mb-6">
+          <button onclick="showPage('invoices')" class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <div>
+            <h1 class="text-xl font-semibold text-slate-800">New Invoice</h1>
+            <p class="text-sm text-slate-400 mt-0.5">Fill in the details below to create and submit an invoice</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4">
+          <!-- Main form -->
+          <div class="col-span-2 space-y-4">
+
+            <!-- Invoice Meta -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+              <h2 class="text-sm font-semibold text-slate-700 mb-4">Invoice Details</h2>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Invoice Type <span class="text-red-400">*</span></label>
+                  <select class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+                    <option>B2B — Business to Business</option>
+                    <option>B2C — Business to Consumer</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Invoice Date <span class="text-red-400">*</span></label>
+                  <input type="date" value="2026-05-13" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Payment Mode <span class="text-red-400">*</span></label>
+                  <select class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+                    <option>Cash</option>
+                    <option>Bank Transfer</option>
+                    <option>Cheque</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Reference No.</label>
+                  <input type="text" placeholder="Optional reference" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Buyer Info -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+              <h2 class="text-sm font-semibold text-slate-700 mb-4">Buyer Information</h2>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="col-span-2">
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Select Customer</label>
+                  <div class="relative">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35"/></svg>
+                    <input type="text" value="Al-Farooq Trading" class="w-full pl-9 pr-4 py-2.5 text-sm border border-brand-400 rounded-lg bg-brand-50/30 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Business Name</label>
+                  <input type="text" value="Al-Farooq Trading Co." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">NTN / CNIC <span class="text-red-400">*</span></label>
+                  <input type="text" value="1234567-8" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Address</label>
+                  <input type="text" placeholder="Buyer address" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Line Items -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-sm font-semibold text-slate-700">Line Items</h2>
+                <button class="flex items-center gap-1.5 text-xs text-brand-600 border border-brand-200 hover:bg-brand-50 px-3 py-1.5 rounded-lg font-medium transition-colors">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  Add Item
+                </button>
+              </div>
+
+              <!-- Header row -->
+              <div class="grid grid-cols-12 gap-2 mb-2">
+                <div class="col-span-4 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Product / Description</div>
+                <div class="col-span-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">HS Code</div>
+                <div class="col-span-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Qty</div>
+                <div class="col-span-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Unit Price</div>
+                <div class="col-span-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Tax %</div>
+                <div class="col-span-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wide text-right">Total</div>
+              </div>
+
+              <!-- Item rows -->
+              <div class="space-y-2">
+                <div class="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-lg p-2">
+                  <div class="col-span-4"><input type="text" value="Cotton Fabric 40s" class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white" /></div>
+                  <div class="col-span-2"><input type="text" value="5208.11" class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white font-mono" /></div>
+                  <div class="col-span-1"><input type="number" value="5" class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white" /></div>
+                  <div class="col-span-2"><input type="number" value="2000" class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white" /></div>
+                  <div class="col-span-1"><input type="number" value="17" class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white" /></div>
+                  <div class="col-span-2 flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-700">Rs 11,700</span>
+                    <button class="text-slate-300 hover:text-red-400 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-lg p-2">
+                  <div class="col-span-4"><input type="text" placeholder="Product or service…" class="w-full text-xs border border-dashed border-slate-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-slate-400" /></div>
+                  <div class="col-span-2"><input type="text" placeholder="0000.00" class="w-full text-xs border border-dashed border-slate-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white font-mono text-slate-400" /></div>
+                  <div class="col-span-1"><input type="number" placeholder="1" class="w-full text-xs border border-dashed border-slate-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-slate-400" /></div>
+                  <div class="col-span-2"><input type="number" placeholder="0" class="w-full text-xs border border-dashed border-slate-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-slate-400" /></div>
+                  <div class="col-span-1"><input type="number" placeholder="17" class="w-full text-xs border border-dashed border-slate-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-slate-400" /></div>
+                  <div class="col-span-2"><span class="text-xs text-slate-300">—</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right panel: Summary -->
+          <div class="space-y-4">
+            <!-- Totals card -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+              <h2 class="text-sm font-semibold text-slate-700 mb-4">Summary</h2>
+              <div class="space-y-2.5">
+                <div class="flex justify-between text-xs">
+                  <span class="text-slate-400">Subtotal</span>
+                  <span class="text-slate-700 font-medium">Rs 10,000</span>
+                </div>
+                <div class="flex justify-between text-xs">
+                  <span class="text-slate-400">Sales Tax (17%)</span>
+                  <span class="text-slate-700 font-medium">Rs 1,700</span>
+                </div>
+                <div class="flex justify-between text-xs">
+                  <span class="text-slate-400">Discount</span>
+                  <span class="text-slate-700 font-medium">Rs 0</span>
+                </div>
+                <div class="border-t border-slate-100 pt-2.5 flex justify-between">
+                  <span class="text-sm font-semibold text-slate-700">Total</span>
+                  <span class="text-sm font-bold text-brand-600">Rs 11,700</span>
+                </div>
+              </div>
+
+              <div class="mt-4 p-3 bg-slate-50 rounded-lg">
+                <p class="text-[10px] text-slate-400 font-medium uppercase tracking-wide mb-1">FBR Invoice #</p>
+                <p class="text-xs font-mono text-slate-600">Auto-assigned on submit</p>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5 space-y-2">
+              <button class="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                Submit to FBR
+              </button>
+              <button class="w-full flex items-center justify-center gap-2 text-slate-600 border border-slate-200 hover:bg-slate-50 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                Save as Draft
+              </button>
+            </div>
+
+            <!-- Offline toggle -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-medium text-slate-700">Offline Mode</p>
+                  <p class="text-[10px] text-slate-400 mt-0.5">Queue for later submission</p>
+                </div>
+                <div class="w-9 h-5 bg-slate-200 rounded-full relative cursor-pointer">
+                  <div class="w-4 h-4 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ══════════════════════════════════════════
+           PAGE: CUSTOMERS
+      ══════════════════════════════════════════ -->
+      <div id="page-customers" class="page p-6">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-xl font-semibold text-slate-800">Customers</h1>
+            <p class="text-sm text-slate-400 mt-0.5">38 customers registered</p>
+          </div>
+          <button class="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Add Customer
+          </button>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm">
+          <div class="flex items-center gap-3 p-4 border-b border-slate-100">
+            <div class="relative flex-1 max-w-xs">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="text" placeholder="Search customers…" class="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+            </div>
+          </div>
+          <table class="w-full">
+            <thead><tr class="border-b border-slate-100">
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Business Name</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">NTN / CNIC</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Email</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Invoices</th>
+              <th class="px-5 py-3"></th>
+            </tr></thead>
+            <tbody>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3"><div class="flex items-center gap-3"><div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0"><span class="text-violet-600 text-[10px] font-bold">AL</span></div><span class="text-xs font-medium text-slate-700">Al-Farooq Trading</span></div></td>
+                <td class="px-5 py-3 text-xs font-mono text-slate-500">1234567-8</td>
+                <td class="px-5 py-3 text-xs text-slate-500">alfarooq@mail.com</td>
+                <td class="px-5 py-3"><span class="badge badge-blue">18 invoices</span></td>
+                <td class="px-5 py-3"><div class="flex gap-1"><button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div></td>
+              </tr>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3"><div class="flex items-center gap-3"><div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0"><span class="text-amber-600 text-[10px] font-bold">ZE</span></div><span class="text-xs font-medium text-slate-700">Zeeshan Enterprises</span></div></td>
+                <td class="px-5 py-3 text-xs font-mono text-slate-500">9876543-2</td>
+                <td class="px-5 py-3 text-xs text-slate-500">zeeshan@ent.pk</td>
+                <td class="px-5 py-3"><span class="badge badge-blue">12 invoices</span></td>
+                <td class="px-5 py-3"><div class="flex gap-1"><button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div></td>
+              </tr>
+              <tr class="table-row">
+                <td class="px-5 py-3"><div class="flex items-center gap-3"><div class="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0"><span class="text-emerald-600 text-[10px] font-bold">NS</span></div><span class="text-xs font-medium text-slate-700">National Suppliers Ltd.</span></div></td>
+                <td class="px-5 py-3 text-xs font-mono text-slate-500">5544332-1</td>
+                <td class="px-5 py-3 text-xs text-slate-500">info@nationalsuppliers.pk</td>
+                <td class="px-5 py-3"><span class="badge badge-blue">9 invoices</span></td>
+                <td class="px-5 py-3"><div class="flex gap-1"><button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+      <!-- ══════════════════════════════════════════
+           PAGE: OFFLINE QUEUE
+      ══════════════════════════════════════════ -->
+      <div id="page-offline" class="page p-6">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-xl font-semibold text-slate-800">Offline Queue</h1>
+            <p class="text-sm text-slate-400 mt-0.5">3 invoices pending submission</p>
+          </div>
+          <button class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+            Process All
+          </button>
+        </div>
+        <!-- Warning banner -->
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-start gap-3">
+          <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <div>
+            <p class="text-sm font-medium text-amber-800">You have 3 invoices in the offline queue</p>
+            <p class="text-xs text-amber-600 mt-0.5">These will be automatically submitted when internet connectivity is restored.</p>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm">
+          <table class="w-full">
+            <thead><tr class="border-b border-slate-100">
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Invoice Ref</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Buyer</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Amount</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Retries</th>
+              <th class="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Status</th>
+              <th class="px-5 py-3"></th>
+            </tr></thead>
+            <tbody>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3 text-xs font-mono text-slate-700">LOCAL-0042</td>
+                <td class="px-5 py-3 text-xs text-slate-600">Al-Farooq Trading</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 7,200</td>
+                <td class="px-5 py-3 text-xs text-slate-400">0 / 3</td>
+                <td class="px-5 py-3"><span class="badge badge-yellow">PENDING</span></td>
+                <td class="px-5 py-3"><button class="text-xs text-red-500 hover:text-red-600 font-medium">Remove</button></td>
+              </tr>
+              <tr class="table-row border-b border-slate-50">
+                <td class="px-5 py-3 text-xs font-mono text-slate-700">LOCAL-0041</td>
+                <td class="px-5 py-3 text-xs text-slate-600">Prime Merchants</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 3,100</td>
+                <td class="px-5 py-3 text-xs text-slate-400">2 / 3</td>
+                <td class="px-5 py-3"><span class="badge badge-red">FAILED</span></td>
+                <td class="px-5 py-3"><button class="text-xs text-brand-600 hover:text-brand-700 font-medium">Retry</button></td>
+              </tr>
+              <tr class="table-row">
+                <td class="px-5 py-3 text-xs font-mono text-slate-700">LOCAL-0040</td>
+                <td class="px-5 py-3 text-xs text-slate-600">Karachi Textiles</td>
+                <td class="px-5 py-3 text-xs font-semibold text-slate-700">Rs 11,500</td>
+                <td class="px-5 py-3 text-xs text-slate-400">0 / 3</td>
+                <td class="px-5 py-3"><span class="badge badge-yellow">PENDING</span></td>
+                <td class="px-5 py-3"><button class="text-xs text-red-500 hover:text-red-600 font-medium">Remove</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+      <!-- ══════════════════════════════════════════
+           PAGE: SETTINGS
+      ══════════════════════════════════════════ -->
+      <div id="page-settings" class="page p-6">
+        <div class="mb-6">
+          <h1 class="text-xl font-semibold text-slate-800">Settings</h1>
+          <p class="text-sm text-slate-400 mt-0.5">Manage FBR API tokens and environment configuration</p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4">
+          <div class="col-span-2 space-y-4">
+
+            <!-- Environment toggle -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+              <h2 class="text-sm font-semibold text-slate-700 mb-4">Environment</h2>
+              <div class="flex gap-3">
+                <button class="flex-1 py-3 rounded-lg border-2 border-brand-500 bg-brand-50 text-brand-700 text-sm font-semibold">
+                  Sandbox
+                  <p class="text-xs font-normal text-brand-400 mt-0.5">Test environment</p>
+                </button>
+                <button class="flex-1 py-3 rounded-lg border-2 border-slate-200 text-slate-500 text-sm font-semibold hover:border-slate-300 transition-colors">
+                  Production
+                  <p class="text-xs font-normal text-slate-400 mt-0.5">Live FBR API</p>
+                </button>
+              </div>
+            </div>
+
+            <!-- Token config -->
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+              <h2 class="text-sm font-semibold text-slate-700 mb-4">FBR API Token</h2>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Sandbox Token</label>
+                  <div class="relative">
+                    <input type="password" value="sbx_tok_a1b2c3d4e5f6g7h8i9j0" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 pr-10 font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+                    <button class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-1.5 mt-1.5">
+                    <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                    <span class="text-[10px] text-emerald-600 font-medium">Token valid — expires 30 Jun 2026</span>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-500 mb-1.5">Production Token</label>
+                  <input type="password" placeholder="Enter production token…" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 font-mono text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+                </div>
+                <button class="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+                  Save Token
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Status card -->
+          <div class="space-y-4">
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+              <h2 class="text-sm font-semibold text-slate-700 mb-4">Connection Status</h2>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">FBR API</span>
+                  <span class="badge badge-green">Connected</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">Environment</span>
+                  <span class="badge badge-yellow">Sandbox</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">Last sync</span>
+                  <span class="text-xs text-slate-400">2 min ago</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">Token expires</span>
+                  <span class="text-xs text-slate-400">48 days</span>
+                </div>
+              </div>
+              <button class="mt-4 w-full text-xs text-brand-600 border border-brand-200 hover:bg-brand-50 px-3 py-2 rounded-lg font-medium transition-colors">
+                Test Connection
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script>
+  const pages = ['dashboard','invoices','add-invoice','customers','offline','settings'];
+  const titles = { dashboard:'Dashboard', invoices:'Invoices', 'add-invoice':'Add Invoice', customers:'Customers', offline:'Offline Queue', settings:'Settings' };
+  const navMap  = { dashboard:'nav-dashboard', invoices:'nav-invoices', 'add-invoice':'nav-add-invoice', customers:'nav-customers', offline:'nav-offline', settings:'nav-settings' };
+
+  function showPage(id) {
+    pages.forEach(p => {
+      document.getElementById('page-'+p).classList.remove('active');
+    });
+    document.getElementById('page-'+id).classList.add('active');
+    document.getElementById('page-title').textContent = titles[id] || id;
+
+    Object.values(navMap).forEach(n => { if(document.getElementById(n)) document.getElementById(n).classList.remove('active'); });
+    if(navMap[id] && document.getElementById(navMap[id])) document.getElementById(navMap[id]).classList.add('active');
+  }
+</script>
+</body>
+</html>

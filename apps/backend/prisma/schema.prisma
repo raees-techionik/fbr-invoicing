@@ -1,0 +1,261 @@
+// FBR E-Invoicing — multi-tenant: users belong to one or more companies (business + optional personal workspace)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CompanyKind {
+  PERSONAL
+  BUSINESS
+}
+
+/// Role within a company (maps to SOW: Customer Admin, Sub-User, Accountant/Viewer)
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  /// Platform operator (full access) — use sparingly
+  isSuperAdmin Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships UserCompanyMembership[]
+}
+
+model Company {
+  id        String      @id @default(cuid())
+  name      String
+  kind      CompanyKind
+  legalName String?
+  ntn       String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  memberships UserCompanyMembership[]
+}
+
+model UserCompanyMembership {
+  id        String         @id @default(cuid())
+  userId    String
+  companyId String
+  role      MembershipRole @default(MEMBER)
+  isDefault Boolean        @default(false)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([userId])
+  @@index([companyId])
+}
+
+model CompanyProfile {
+  id           String   @id @default(cuid())
+  companyName  String   @default("")
+  ntnOrCnic    String   @default("")
+  businessType String   @default("")
+  province     String   @default("")
+  address      String   @default("")
+  phoneNumber  String   @default("")
+  emailAddress String   @default("")
+  logoBase64   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model StaffMember {
+  id          String   @id @default(cuid())
+  memberName  String
+  designation String
+  cnicNtn     String
+  phoneNumber String
+  email       String
+  province    String
+  address     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([memberName])
+  @@index([email])
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  name             String
+  cnic             String
+  phone            String
+  email            String
+  province         String
+  address          String
+  registrationType String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([name])
+  @@index([cnic])
+}
+
+model ProductMapping {
+  id                   String   @id @default(cuid())
+  productName          String
+  hsCode               String
+  hsDescription        String
+  salesTaxRate         Float    @default(0)
+  unitOfMeasurement    String
+  sroScheduleNo        String?
+  saleType             String
+  furtherTaxApplicable Boolean  @default(false)
+  extraTaxApplicable   Boolean  @default(false)
+  status               String   @default("Active")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([productName])
+  @@index([hsCode])
+  @@index([status])
+}
+
+model Invoice {
+  id                    String   @id @default(uuid())
+  fbrInvoiceNumber      String?
+  invoiceType           String
+  invoiceDate           DateTime
+  invoiceRefNo          String?
+  sellerNTNCNIC         String
+  sellerBusinessName    String
+  sellerProvince        String
+  sellerAddress         String
+  buyerNTNCNIC          String?
+  buyerBusinessName     String
+  buyerProvince         String
+  buyerAddress          String
+  buyerRegistrationType String
+  status                String   @default("DRAFT")
+  isOffline             Boolean  @default(false)
+  offlineQueuedAt       DateTime?
+  submittedAt           DateTime?
+  fbrRawResponse        Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  items        InvoiceItem[]
+  offlineQueue OfflineQueue[]
+
+  @@index([fbrInvoiceNumber])
+  @@index([invoiceDate])
+  @@index([invoiceType])
+  @@index([status])
+  @@index([isOffline])
+}
+
+model InvoiceItem {
+  id                              String   @id @default(uuid())
+  invoiceId                       String
+  fbrItemInvoiceNo                String?
+  hsCode                          String
+  productDescription              String
+  rate                            String
+  uom                             String
+  quantity                        Float
+  totalValues                     Float
+  valueSalesExcludingST           Float
+  fixedNotifiedValueOrRetailPrice Float
+  salesTaxApplicable              Float
+  salesTaxWithheldAtSource        Float
+  extraTax                        Float?
+  furtherTax                      Float?
+  sroScheduleNo                   String?
+  fedPayable                      Float?
+  discount                        Float?
+  saleType                        String
+  sroItemSerialNo                 String?
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([hsCode])
+  @@index([saleType])
+}
+
+model Product {
+  id                   String   @id @default(uuid())
+  name                 String
+  hsCode               String
+  hsDescription        String
+  defaultSaleType      String
+  defaultRate          String
+  defaultUom           String
+  inStock              String?  @default("")
+  sroScheduleNo        String?
+  furtherTaxApplicable Boolean  @default(false)
+  extraTaxApplicable   Boolean  @default(false)
+  fedApplicable        Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([name])
+  @@index([hsCode])
+  @@index([isActive])
+}
+
+model Token {
+  id          String   @id @default(uuid())
+  environment String
+  token       String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([environment])
+  @@index([isActive])
+}
+
+model OfflineQueue {
+  id             String    @id @default(uuid())
+  invoiceId      String
+  invoicePayload Json
+  status         String    @default("PENDING")
+  queuedAt       DateTime  @default(now())
+  uploadedAt     DateTime?
+  retryCount     Int       @default(0)
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([status])
+  @@index([queuedAt])
+  @@index([uploadedAt])
+}
+
+model ReferenceCache {
+  id        String   @id @default(uuid())
+  cacheKey  String   @unique
+  data      Json
+  fetchedAt DateTime
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+

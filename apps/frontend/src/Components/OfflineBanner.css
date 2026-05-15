@@ -1,0 +1,40 @@
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 8px 16px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.offline-banner--offline {
+  background: #b40000;
+}
+
+.offline-banner--pending {
+  background: #856404;
+}
+
+.offline-banner a {
+  color: #ffffff;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .offline-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 58px;
+    text-align: left;
+  }
+}
