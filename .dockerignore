@@ -1,0 +1,10 @@
+.git
+node_modules
+apps/*/node_modules
+apps/*/dist
+apps/*/build
+apps/backend/.data
+docx_final_render_check
+docx_render_check
+report_screenshots
+*.log
