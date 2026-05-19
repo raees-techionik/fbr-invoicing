@@ -6,6 +6,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 
 process.env.OFFLINE_QUEUE_AUTO_PROCESS_DISABLED = "true";
+process.env.DEV_DB_FALLBACK_DISABLED = "true";
 
 let server: Server;
 let baseUrl = "";
@@ -673,6 +674,128 @@ describe("backend guide-compatible route contracts", () => {
     const results = await getJson("/api/sandbox/results");
     assert.equal(typeof results.data, "object");
     assert.equal(Array.isArray(results.data), false);
+  });
+
+  test("product CRUD: create, get, list, update, and soft-delete via /api/products", async () => {
+    const marker = `TEST-PRODUCT-${Date.now()}`;
+    let createdId = "";
+
+    try {
+      // CREATE
+      const created = await requestJson("/api/products", {
+        method: "POST",
+        body: {
+          productName: marker,
+          hsCode: "0101.2100",
+          salesTaxRate: 18,
+          unitOfMeasurement: "KG",
+          saleType: "Goods at standard rate",
+          inStock: "50",
+        },
+      });
+      assert.equal(created.status, 201);
+      assert.equal(created.body.data.productName, marker);
+      assert.equal(created.body.data.hsCode, "0101.2100");
+      assert.equal(created.body.data.isActive, true);
+      assert.equal(created.body.data.status, "Active");
+      assert.equal(created.body.data.salesTaxRate, 18);
+      assert.ok(created.body.data.invoiceFields?.productMappingId);
+      createdId = created.body.data.id;
+
+      // GET by ID
+      const fetched = await getJson(`/api/products/${createdId}`);
+      assert.equal(fetched.data.id, createdId);
+      assert.equal(fetched.data.productName, marker);
+
+      // LIST with search
+      const list = await getJson(`/api/products?search=${encodeURIComponent(marker)}`);
+      assert.ok(Array.isArray(list.data));
+      assert.ok(list.data.some((p: { id: string }) => p.id === createdId));
+
+      // UPDATE (partial — only changed fields; others fall back to existing)
+      const updated = await requestJson(`/api/products/${createdId}`, {
+        method: "PUT",
+        body: { inStock: "99" },
+      });
+      assert.equal(updated.status, 200);
+      assert.equal(updated.body.data.inStock, "99");
+      assert.equal(updated.body.data.productName, marker, "productName should be preserved on partial update");
+
+      // DELETE (soft — sets isActive=false)
+      const deleted = await requestJson(`/api/products/${createdId}`, {
+        method: "DELETE",
+      });
+      assert.equal(deleted.status, 200);
+      assert.equal(deleted.body.data.id, createdId);
+      assert.equal(deleted.body.data.deleted, true);
+
+      // GET after soft-delete returns the record with isActive=false
+      const afterDelete = await getJson(`/api/products/${createdId}`);
+      assert.equal(afterDelete.data.isActive, false);
+      assert.equal(afterDelete.data.status, "Inactive");
+
+      // 404 for a completely unknown ID
+      const notFound = await requestJson("/api/products/not-a-real-id", { method: "GET" });
+      assert.equal(notFound.status, 404);
+    } finally {
+      if (createdId) {
+        await prisma.product.deleteMany({ where: { id: createdId } });
+      } else {
+        await prisma.product.deleteMany({ where: { name: marker } });
+      }
+    }
+  });
+
+  test("token encryption: DB stores ciphertext and masked response uses plaintext last-4", async () => {
+    const testToken = `enc-roundtrip-${Date.now()}-abcd`;
+    const previousTokens = await prisma.token.findMany({
+      where: { environment: "sandbox", isActive: true },
+      select: { id: true },
+    });
+
+    try {
+      const saved = await requestJson("/api/token", {
+        method: "PUT",
+        body: {
+          sandboxToken: testToken,
+          clearSandboxToken: false,
+          clearProductionToken: false,
+        },
+      });
+      assert.equal(saved.status, 200);
+
+      // masked value must reflect the last 4 chars of the plaintext token
+      assert.equal(saved.body.data.tokens.sandbox.masked, `****${testToken.slice(-4)}`);
+      assert.equal(saved.body.data.tokens.sandbox.configured, true);
+
+      // DB must store ciphertext, not the plaintext
+      const dbRow = await prisma.token.findFirst({
+        where: { environment: "sandbox", isActive: true },
+        orderBy: { createdAt: "desc" },
+        select: { token: true },
+      });
+      assert.ok(dbRow?.token, "token row should exist in DB");
+      assert.ok(dbRow!.token.startsWith("v1:"), "stored value must carry v1: AES-256-GCM prefix");
+      assert.ok(!dbRow!.token.includes(testToken), "plaintext must not appear in DB");
+
+      // status endpoint must recognise the newly stored token
+      const status = await getJson("/api/token/status");
+      assert.ok(
+        ["mock", "configured_unverified", "active"].includes(status.data.sandbox.status),
+        `unexpected sandbox status: ${status.data.sandbox.status}`,
+      );
+    } finally {
+      await prisma.token.updateMany({
+        where: { environment: "sandbox", isActive: true },
+        data: { isActive: false },
+      });
+      if (previousTokens.length > 0) {
+        await prisma.token.updateMany({
+          where: { id: { in: previousTokens.map((t) => t.id) } },
+          data: { isActive: true },
+        });
+      }
+    }
   });
 
   test("mocked sandbox run: single scenario passes and status reflects result", async () => {

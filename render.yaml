@@ -26,7 +26,7 @@ services:
       - key: ADMIN_WORKSPACE_NAME
         value: Admin Workspace
       - key: ALLOW_DEV_ADMIN_LOGIN
-        value: "true"
+        value: "false"
       - key: FBR_BASE_URL
         value: https://gw.fbr.gov.pk
       - key: FBR_ENVIRONMENT

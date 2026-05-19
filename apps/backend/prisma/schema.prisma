@@ -109,25 +109,6 @@ model Customer {
   @@index([cnic])
 }
 
-model ProductMapping {
-  id                   String   @id @default(cuid())
-  productName          String
-  hsCode               String
-  hsDescription        String
-  salesTaxRate         Float    @default(0)
-  unitOfMeasurement    String
-  sroScheduleNo        String?
-  saleType             String
-  furtherTaxApplicable Boolean  @default(false)
-  extraTaxApplicable   Boolean  @default(false)
-  status               String   @default("Active")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  @@index([productName])
-  @@index([hsCode])
-  @@index([status])
-}
 
 model Invoice {
   id                    String   @id @default(uuid())

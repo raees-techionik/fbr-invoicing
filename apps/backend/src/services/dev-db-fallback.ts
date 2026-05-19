@@ -1,7 +1,13 @@
-const FALLBACK_TIMEOUT_MS = Number(process.env.DEV_DB_FALLBACK_TIMEOUT_MS || 2500);
-
 export function isDevDbFallbackEnabled() {
+  if (process.env.DEV_DB_FALLBACK_DISABLED === "true") {
+    return false;
+  }
+
   return process.env.ALLOW_DEV_ADMIN_LOGIN === "true";
+}
+
+function fallbackTimeoutMs() {
+  return Number(process.env.DEV_DB_FALLBACK_TIMEOUT_MS || 2500);
 }
 
 export async function withDevDbFallback<T>(
@@ -20,15 +26,16 @@ export async function withDevDbFallback<T>(
     .then((value) => ({ ok: true as const, value }))
     .catch((error) => ({ ok: false as const, error }));
 
+  const timeoutMs = fallbackTimeoutMs();
   const timeoutOperation = new Promise<typeof timeoutToken>((resolve) => {
-    timeout = setTimeout(() => resolve(timeoutToken), FALLBACK_TIMEOUT_MS);
+    timeout = setTimeout(() => resolve(timeoutToken), timeoutMs);
   });
 
   const result = await Promise.race([guardedOperation, timeoutOperation]);
   if (timeout) clearTimeout(timeout);
 
   if (result === timeoutToken) {
-    console.warn(`[dev-db-fallback] ${label} exceeded ${FALLBACK_TIMEOUT_MS}ms; using local fallback data.`);
+    console.warn(`[dev-db-fallback] ${label} exceeded ${timeoutMs}ms; using local fallback data.`);
     return fallback();
   }
 

@@ -57,6 +57,15 @@ function normaliseItem(item = {}) {
   };
 }
 
+function deriveTaxPeriod(invoiceDate) {
+  if (!invoiceDate) return '-';
+  const d = new Date(invoiceDate);
+  if (isNaN(d.getTime())) return '-';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${mm}/${yyyy}`;
+}
+
 function normaliseRecord(record = {}) {
   const payload = record.payload || {};
   const status = String(record.status || '').toUpperCase();
@@ -66,9 +75,11 @@ function normaliseRecord(record = {}) {
       ? payload.items
       : [];
 
+  const invoiceDate = first(record.invoiceDate, record.invoice_date, payload.invoiceDate);
   return {
     invoiceType: first(record.invoiceType, record.invoice_type, payload.invoiceType, 'Sales Tax Invoice'),
-    invoiceDate: first(record.invoiceDate, record.invoice_date, payload.invoiceDate),
+    invoiceDate,
+    taxPeriod: deriveTaxPeriod(invoiceDate),
     invoiceRefNo: first(record.invoiceRefNo, record.invoice_ref_no, payload.invoiceRefNo),
     fbrInvoiceNumber: first(record.fbrInvoiceNumber, record.fbr_invoice_number),
     sellerBusinessName: first(record.sellerBusinessName, record.seller_business_name, payload.sellerBusinessName),
@@ -166,6 +177,7 @@ async function buildPdf(data) {
     ],
     [
       ['FBR Invoice No:', safe(data.fbrInvoiceNumber)],
+      ['Tax Period:', safe(data.taxPeriod)],
     ],
     [
       ['Status:', safe(data.status)],
