@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Login from "./Login";
+import Signup from "./Signup";
 import Dashboard from "./Pages/Dashboard";
 import Sidebar from "./Components/Sidebar";
 import Company from "./Pages/Company";
@@ -105,7 +106,7 @@ function MainContent() {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
 
-  const showSidebarToggle = !['/', '/forgot-password', '/forgot-password/reset-password', '/forgot-password/reset-password/new-password'].includes(location.pathname);
+  const showSidebarToggle = !['/', '/signup', '/forgot-password', '/forgot-password/reset-password', '/forgot-password/reset-password/new-password'].includes(location.pathname);
   const showSystemBanner = !isOnline || isProcessing;
 
   const PageWithSidebar = ({ component: Component }) => (
@@ -144,6 +145,7 @@ function MainContent() {
       <Routes>
         {/* Public — redirect to dashboard if already logged in */}
         <Route path="/" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+        <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
         <Route path="/forgot-password" element={<PublicOnlyRoute><StepOne /></PublicOnlyRoute>} />
         <Route path="/forgot-password/reset-password" element={<PublicOnlyRoute><StepTwo /></PublicOnlyRoute>} />
         <Route path="/forgot-password/reset-password/new-password" element={<PublicOnlyRoute><StepThree /></PublicOnlyRoute>} />

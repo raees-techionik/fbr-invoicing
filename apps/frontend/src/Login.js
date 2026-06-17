@@ -3,7 +3,6 @@ import axios from "axios";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { FiArrowRight, FiLock, FiMail, FiShield } from "react-icons/fi";
-import loginimg from "./Images/imglogin.png";
 import logo from "./Images/New Black Logo 1.png";
 import icon from "./Images/TechionikIcon.png";
 import "./Login.css";
@@ -126,6 +125,10 @@ const Login = () => {
               </>
             )}
           </button>
+
+          <p className="login-signup-link">
+            Don't have an account? <Link to="/signup">Sign up</Link>
+          </p>
         </form>
 
         <div className="login-powered">
@@ -136,18 +139,37 @@ const Login = () => {
         </div>
       </section>
 
-      <section className="login-visual-panel" aria-label="Digital invoicing overview">
-        <div className="login-visual-card">
-          <div className="login-visual-card__top">
-            <span>Submission Readiness</span>
-            <strong>Live</strong>
+      <section className="login-visual-panel" aria-hidden="true">
+        <div className="login-visual-deco login-visual-deco--1" />
+        <div className="login-visual-deco login-visual-deco--2" />
+        <div className="login-visual-deco login-visual-deco--3" />
+        <div className="login-visual-inner">
+          <div className="login-visual-eyebrow">
+            <span className="login-visual-dot" />
+            FBR Certified Platform
           </div>
-          <img src={loginimg} alt="Digital invoicing dashboard illustration" />
-        </div>
-        <div className="login-readiness-strip" aria-label="Platform highlights">
-          <span>Token Settings</span>
-          <span>Sandbox Testing</span>
-          <span>Offline Queue</span>
+          <h2 className="login-visual-headline">Pakistan's leading<br />e-invoicing solution</h2>
+          <p className="login-visual-sub">Submit invoices directly to FBR in real time — with built-in offline fallback, sandbox testing, and multi-user access control.</p>
+          <div className="login-visual-stats">
+            <div className="login-stat">
+              <span className="login-stat__value">99.9%</span>
+              <span className="login-stat__label">Uptime</span>
+            </div>
+            <div className="login-stat">
+              <span className="login-stat__value">&lt;2s</span>
+              <span className="login-stat__label">FBR Response</span>
+            </div>
+            <div className="login-stat">
+              <span className="login-stat__value">256-bit</span>
+              <span className="login-stat__label">Encryption</span>
+            </div>
+          </div>
+          <ul className="login-visual-features">
+            <li><span className="login-feature-check">✓</span>Real-time FBR invoice submission</li>
+            <li><span className="login-feature-check">✓</span>Offline queue with auto-retry</li>
+            <li><span className="login-feature-check">✓</span>Sandbox testing environment</li>
+            <li><span className="login-feature-check">✓</span>Multi-user roles &amp; permissions</li>
+          </ul>
         </div>
       </section>
     </main>
