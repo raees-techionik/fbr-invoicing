@@ -6,10 +6,12 @@ import {
   getCurrentCompany,
   inviteCompanyMember,
   listCompanyActivity,
+  listCompanyNotifications,
   listCompanies,
   listCompanyInvitations,
   listCompanyMembers,
   removeCompanyMember,
+  resendCompanyInvitation,
   revokeCompanyInvitation,
   setDefaultCompany,
   updateCompanyMemberRole,
@@ -80,6 +82,12 @@ companiesRouter.post("/current/invitations", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+companiesRouter.post("/current/invitations/:invitationId/resend", async (req, res, next) => {
+  try {
+    res.json({ data: await resendCompanyInvitation(req.companyId!, actor(req), req.params.invitationId) });
+  } catch (error) { next(error); }
+});
+
 companiesRouter.delete("/current/invitations/:invitationId", async (req, res, next) => {
   try {
     res.json({ data: await revokeCompanyInvitation(req.companyId!, actor(req), req.params.invitationId) });
@@ -103,6 +111,12 @@ companiesRouter.get("/current/onboarding", async (req, res, next) => {
 companiesRouter.get("/current/activity", async (req, res, next) => {
   try {
     res.json({ data: await listCompanyActivity(req.companyId!, actor(req), req.query.limit) });
+  } catch (error) { next(error); }
+});
+
+companiesRouter.get("/current/notifications", async (req, res, next) => {
+  try {
+    res.json({ data: await listCompanyNotifications(req.companyId!, req.query.limit) });
   } catch (error) { next(error); }
 });
 

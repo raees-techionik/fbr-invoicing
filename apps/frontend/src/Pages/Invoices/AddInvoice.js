@@ -7,7 +7,7 @@ import { hsCodes, hsCodeLookup } from "../../Components/hsCodes";
 import FbrErrorDisplay, { getFbrErrorsFromApiResponse } from "../../Components/FbrErrorDisplay";
 import { getFbrReferenceBootstrap } from "../../services/fbrReferenceApi";
 import { getProductMappings, resolveHsInvoiceFields } from "../../services/fbrProductMappingsApi";
-import { submitInvoice } from "../../services/fbrInvoiceApi";
+import { formatInvoice, lookupReferenceInvoice, submitInvoice } from "../../services/fbrInvoiceApi";
 import { enqueueOfflineInvoice } from "../../services/fbrOfflineQueueApi";
 import { getSandboxScenarios } from "../../services/fbrSandboxApi";
 import { getCustomers } from "../../services/customersApi";
@@ -148,6 +148,11 @@ const AddInvoice = () => {
   const [referenceError, setReferenceError] = useState("");
   const [productMappings, setProductMappings] = useState([]);
   const [productMappingError, setProductMappingError] = useState("");
+  const [isFormattingInvoice, setIsFormattingInvoice] = useState(false);
+  const [formattedInvoicePreview, setFormattedInvoicePreview] = useState(null);
+  const [isLookingUpReference, setIsLookingUpReference] = useState(false);
+  const [referenceLookupResult, setReferenceLookupResult] = useState(null);
+  const [invoiceToolError, setInvoiceToolError] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -381,6 +386,41 @@ useEffect(() => {
     (sum, item) => sum + (parseFloat(item.totalValues) || 0),
     0
   );
+
+const buildInvoicePayload = () => ({
+  invoiceType: invoiceData.invoiceType || "Sale Invoice",
+  invoiceDate: invoiceData.invoiceDate || new Date().toISOString().split('T')[0],
+  sellerNTNCNIC: invoiceData.sellerNTNCNIC || "0000000000000",
+  sellerBusinessName: invoiceData.sellerBusinessName || "",
+  sellerProvince: invoiceData.sellerProvince || "",
+  sellerAddress: invoiceData.sellerAddress || "",
+  buyerNTNCNIC: invoiceData.buyerNTNCNIC || "",
+  buyerBusinessName: invoiceData.buyerBusinessName || "",
+  buyerProvince: invoiceData.buyerProvince || "",
+  buyerAddress: invoiceData.buyerAddress || "",
+  buyerRegistrationType: invoiceData.buyerRegistrationType || "Registered",
+  invoiceRefNo: invoiceData.invoiceRefNo || "",
+  scenarioId: invoiceData.scenarioId || "",
+  items: invoiceData.items.map(item => ({
+    hsCode: item.hsCode || "0000.0000",
+    productDescription: item.productDescription || "",
+    rate: `${Number(item.rate) || 0}%`,
+    uoM: item.uoM || "",
+    quantity: parseInt(item.quantity) || 0,
+    totalValues: parseFloat(item.totalValues) || 0,
+    valueSalesExcludingST: parseFloat(item.valueSalesExcludingST) || 0,
+    fixedNotifiedValueOrRetailPrice: parseFloat(item.fixedNotifiedValueOrRetailPrice) || 0,
+    salesTaxApplicable: parseInt(item.salesTaxApplicable) || 0,
+    salesTaxWithheldAtSource: parseFloat(item.salesTaxWithheldAtSource) || 0,
+    extraTax: parseFloat(item.extraTax) || '',
+    furtherTax: parseFloat(item.furtherTax) || 0,
+    sroScheduleNo: item.sroScheduleNo || "",
+    fedPayable: parseFloat(item.fedPayable) || 0,
+    discount: parseFloat(item.discount) || 0,
+    saleType: item.saleType || "Goods at standard rate (default)",
+    sroItemSerialNo: item.sroItemSerialNo || ""
+  }))
+});
 
 const handlePrintInvoice = async () => {
   try {
@@ -659,46 +699,7 @@ const handlePrintInvoice = async () => {
 
     
 
-      // Prepare the data for API submission
-     const prepareApiData = () => {
-  return {
-    invoiceType: invoiceData.invoiceType || "Sale Invoice",
-    invoiceDate: invoiceData.invoiceDate || new Date().toISOString().split('T')[0],
-    sellerNTNCNIC: invoiceData.sellerNTNCNIC || "0000000000000",
-    sellerBusinessName: invoiceData.sellerBusinessName || "",
-    sellerProvince: invoiceData.sellerProvince || "",
-    sellerAddress: invoiceData.sellerAddress || "",
-    buyerNTNCNIC: invoiceData.buyerNTNCNIC || "",
-    buyerBusinessName: invoiceData.buyerBusinessName || "",
-    buyerProvince: invoiceData.buyerProvince || "",
-    buyerAddress: invoiceData.buyerAddress || "",
-    buyerRegistrationType: invoiceData.buyerRegistrationType || "Registered",
-    invoiceRefNo: invoiceData.invoiceRefNo || "",
-    scenarioId: invoiceData.scenarioId || "",
-    items: invoiceData.items.map(item => ({
-      hsCode: item.hsCode || "0000.0000",
-      productDescription: item.productDescription || "",
-      rate: `${Number(item.rate) || 0}%`,
-      uoM: item.uoM || "",
-      quantity: parseInt(item.quantity) || 0,
-      totalValues: parseFloat(item.totalValues) || 0,
-      valueSalesExcludingST: parseFloat(item.valueSalesExcludingST) || 0,
-      fixedNotifiedValueOrRetailPrice: parseFloat(item.fixedNotifiedValueOrRetailPrice) || 0 ,
-      salesTaxApplicable: parseInt(item.salesTaxApplicable) || 0,
-      salesTaxWithheldAtSource: parseFloat(item.salesTaxWithheldAtSource) || 0,
-      extraTax: parseFloat(item.extraTax) || '',
-      furtherTax: parseFloat(item.furtherTax) || 0,
-      sroScheduleNo: item.sroScheduleNo || "",
-      fedPayable: parseFloat(item.fedPayable) || 0,
-      discount: parseFloat(item.discount) || 0,
-      saleType: item.saleType || "Goods at standard rate (default)",
-      sroItemSerialNo: item.sroItemSerialNo || ""
-    }))
-  };
-};
-
-// Then in handleSubmitInvoice:
-apiData = prepareApiData();
+      apiData = buildInvoicePayload();
 
       const queueInvoiceForLater = async (reason) => {
         const queued = await enqueueOfflineInvoice({
@@ -958,6 +959,47 @@ const handleDownloadPdf = async () => {
   }
 };
 
+const handlePreviewFormattedPayload = async () => {
+  setIsFormattingInvoice(true);
+  setInvoiceToolError("");
+  setFormattedInvoicePreview(null);
+  try {
+    const result = await formatInvoice({
+      invoice: buildInvoicePayload(),
+      settings: { environment: "sandbox", useMock: true },
+    });
+    setFormattedInvoicePreview(result);
+  } catch (error) {
+    console.error("[invoice-format-preview]", error);
+    setInvoiceToolError(error.response?.data?.error || error.response?.data?.message || error.message || "Unable to format invoice payload.");
+  } finally {
+    setIsFormattingInvoice(false);
+  }
+};
+
+const handleLookupReferenceInvoice = async () => {
+  setInvoiceToolError("");
+  setReferenceLookupResult(null);
+  if (!invoiceData.invoiceRefNo) {
+    setInvoiceToolError("Enter an invoice reference number before lookup.");
+    return;
+  }
+
+  setIsLookingUpReference(true);
+  try {
+    const result = await lookupReferenceInvoice(invoiceData.invoiceRefNo, {
+      environment: "sandbox",
+      useMock: true,
+    });
+    setReferenceLookupResult(result);
+  } catch (error) {
+    console.error("[invoice-reference-lookup]", error);
+    setInvoiceToolError(error.response?.data?.error || error.response?.data?.message || error.message || "Reference invoice lookup failed.");
+  } finally {
+    setIsLookingUpReference(false);
+  }
+};
+
 const provinceOptions = referenceData.provinces.length
   ? referenceData.provinces.map((province) => ({
       value: province.description,
@@ -1090,6 +1132,32 @@ const renderFbrFieldError = (field, index) => {
       </div>
 
       <FbrErrorDisplay errors={headerFbrErrors} />
+
+      {(invoiceToolError || formattedInvoicePreview || referenceLookupResult) && (
+        <section className="add-invoice-tools-panel" aria-live="polite">
+          {invoiceToolError && <div className="alert alert-warning mb-0">{invoiceToolError}</div>}
+          {referenceLookupResult && (
+            <div className="add-invoice-tool-card">
+              <div>
+                <span>Reference lookup</span>
+                <strong>{referenceLookupResult.found ? "Reference available" : "Reference not confirmed"}</strong>
+                <p>{referenceLookupResult.message}</p>
+              </div>
+              <code>{referenceLookupResult.invoiceRefNo}</code>
+            </div>
+          )}
+          {formattedInvoicePreview && (
+            <div className="add-invoice-tool-card add-invoice-tool-card--payload">
+              <div>
+                <span>FBR formatted payload</span>
+                <strong>{formattedInvoicePreview.message}</strong>
+                <p>{formattedInvoicePreview.payload?.items?.length || 0} item{(formattedInvoicePreview.payload?.items?.length || 0) === 1 ? "" : "s"} ready for {formattedInvoicePreview.environment} formatting.</p>
+              </div>
+              <pre>{JSON.stringify(formattedInvoicePreview.payload, null, 2)}</pre>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="container-fluid px-0 mt-3 mt-md-0">
         <div className="row">
@@ -1276,13 +1344,18 @@ const renderFbrFieldError = (field, index) => {
                 {renderFbrFieldError("buyerRegistrationType")}
               
                 <label>Invoice Reference No</label>
-                <input
-                  type="text"
-                  className={fieldClassName("invoice-input form-control", "invoiceRefNo")}
-                  name="invoiceRefNo"
-                  value={invoiceData.invoiceRefNo}
-                  onChange={(e) => handleInputChange(e, "invoiceRefNo")}
-                />
+                <div className="add-invoice-reference-row">
+                  <input
+                    type="text"
+                    className={fieldClassName("invoice-input form-control", "invoiceRefNo")}
+                    name="invoiceRefNo"
+                    value={invoiceData.invoiceRefNo}
+                    onChange={(e) => handleInputChange(e, "invoiceRefNo")}
+                  />
+                  <button type="button" className="btn buttonsave" onClick={handleLookupReferenceInvoice} disabled={isLookingUpReference}>
+                    {isLookingUpReference ? "Checking..." : "Lookup"}
+                  </button>
+                </div>
                 {renderFbrFieldError("invoiceRefNo")}
 
                   </div>
@@ -1704,6 +1777,9 @@ const renderFbrFieldError = (field, index) => {
         <div className="add-invoice-actions">
           <button className="btn buttonsave" onClick={handlePrintInvoice}>Print Invoice</button>
           <button className="btn buttonsave" onClick={handleDownloadPdf}>Download PDF</button>
+          <button className="btn buttonsave" onClick={handlePreviewFormattedPayload} disabled={isFormattingInvoice}>
+            {isFormattingInvoice ? "Formatting..." : "Preview FBR Payload"}
+          </button>
           <button
             className="btn buttonsubmitinvoice"
             onClick={handleSubmitInvoice}

@@ -8,6 +8,7 @@ import {
   FiExternalLink,
   FiPlus,
   FiRefreshCw,
+  FiSend,
   FiTrash2,
   FiUserPlus,
   FiUsers,
@@ -22,6 +23,7 @@ import {
   getCurrentCompany,
   inviteCompanyMember,
   removeCompanyMember,
+  resendCompanyInvitation,
   revokeCompanyInvitation,
   updateCurrentCompany,
   updateCompanyMember,
@@ -108,6 +110,7 @@ function OnboardingWorkspace() {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resendingInvitationId, setResendingInvitationId] = useState(null);
   const [notice, setNotice] = useState(null);
   const [invite, setInvite] = useState({ email: "", role: "MEMBER" });
   const [createdInvite, setCreatedInvite] = useState(null);
@@ -306,6 +309,23 @@ function OnboardingWorkspace() {
       setNotice({ type: "success", text: "Invitation revoked." });
     } catch (error) {
       setNotice({ type: "error", text: errorMessage(error) });
+    }
+  };
+
+  const resendInvite = async invitationId => {
+    setResendingInvitationId(invitationId);
+    setNotice(null);
+    try {
+      const result = await resendCompanyInvitation(invitationId);
+      setCreatedInvite(result.devInvitationToken ? result : null);
+      const [invitationResult, activityResult] = await Promise.all([getCompanyInvitations(), getCompanyActivity()]);
+      setInvitations(invitationResult);
+      setActivity(activityResult);
+      setNotice({ type: result.emailDelivery?.status === "FAILED" ? "error" : "success", text: invitationNotice(result) });
+    } catch (error) {
+      setNotice({ type: "error", text: errorMessage(error) });
+    } finally {
+      setResendingInvitationId(null);
     }
   };
 
@@ -512,7 +532,7 @@ function OnboardingWorkspace() {
             <div className="onboarding-section-heading"><div><h2>Invitations</h2><p>Pending and historical company invitations.</p></div></div>
             <div className="onboarding-table-wrap"><table className="onboarding-table"><thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Email</th><th>Expires</th><th aria-label="Actions" /></tr></thead><tbody>
               {invitations.length === 0 && <tr><td colSpan="6" className="onboarding-empty">No invitations yet.</td></tr>}
-              {invitations.map(item => <tr key={item.id}><td><strong>{item.email}</strong>{item.invitedBy && <span>Invited by {item.invitedBy.fullName || item.invitedBy.email}</span>}</td><td>{label(item.role)}</td><td><span className={`onboarding-status ${statusClass(item.status)}`}>{label(item.status)}</span></td><td><span className={`onboarding-status ${statusClass(item.emailStatus)}`}>{label(item.emailStatus)}</span>{item.emailError && <span>{item.emailError}</span>}</td><td>{new Date(item.expiresAt).toLocaleDateString()}</td><td>{item.status === "PENDING" && <button className="onboarding-icon-button danger" type="button" onClick={() => revokeInvite(item.id)} aria-label={`Revoke invitation for ${item.email}`} title="Revoke invitation"><FiTrash2 /></button>}</td></tr>)}
+              {invitations.map(item => <tr key={item.id}><td><strong>{item.email}</strong>{item.invitedBy && <span>Invited by {item.invitedBy.fullName || item.invitedBy.email}</span>}</td><td>{label(item.role)}</td><td><span className={`onboarding-status ${statusClass(item.status)}`}>{label(item.status)}</span></td><td><span className={`onboarding-status ${statusClass(item.emailStatus)}`}>{label(item.emailStatus)}</span>{deliveryDetail(item) && <span>{deliveryDetail(item)}</span>}</td><td>{new Date(item.expiresAt).toLocaleDateString()}</td><td><div className="onboarding-action-group">{["PENDING", "EXPIRED"].includes(item.status) && <button className="onboarding-icon-button" type="button" onClick={() => resendInvite(item.id)} disabled={resendingInvitationId === item.id} aria-label={`Resend invitation for ${item.email}`} title="Resend invitation">{resendingInvitationId === item.id ? <FiRefreshCw /> : <FiSend />}</button>}{item.status === "PENDING" && <button className="onboarding-icon-button danger" type="button" onClick={() => revokeInvite(item.id)} aria-label={`Revoke invitation for ${item.email}`} title="Revoke invitation"><FiTrash2 /></button>}</div></td></tr>)}
             </tbody></table></div>
           </section>
         </div>
@@ -608,6 +628,13 @@ function Field({ label: fieldLabel, wide = false, children }) {
 
 function Select({ value, values, onChange }) {
   return <select value={value || values[0]} onChange={onChange}>{values.map(item => <option key={item} value={item}>{label(item)}</option>)}</select>;
+}
+
+function deliveryDetail(invitation) {
+  if (invitation.emailError) return invitation.emailError;
+  if (invitation.emailSentAt) return `Sent ${readableDateTime(invitation.emailSentAt)}`;
+  if (invitation.emailAttemptedAt) return `Attempted ${readableDateTime(invitation.emailAttemptedAt)}`;
+  return null;
 }
 
 export default OnboardingWorkspace;

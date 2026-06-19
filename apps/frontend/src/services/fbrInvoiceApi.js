@@ -18,8 +18,23 @@ export async function submitInvoice(invoicePayload) {
   return response.data.data;
 }
 
+export async function formatInvoice(invoicePayload) {
+  const response = await invoiceApi.post("/format", invoicePayload);
+  return response.data.data;
+}
+
 export async function validateInvoice(invoicePayload) {
   const response = await invoiceApi.post("/validate", invoicePayload);
+  return response.data.data;
+}
+
+export async function lookupReferenceInvoice(invoiceRefNo, settings = {}) {
+  const response = await invoiceApi.get("/reference-lookup", {
+    params: {
+      invoiceRefNo,
+      ...settings,
+    },
+  });
   return response.data.data;
 }
 

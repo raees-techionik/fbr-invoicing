@@ -21,9 +21,11 @@ export const removeCompanyMember = (membershipId) => api.delete(`/companies/curr
 
 export const getCompanyInvitations = () => api.get("/companies/current/invitations").then(data);
 export const inviteCompanyMember = (payload) => api.post("/companies/current/invitations", payload).then(data);
+export const resendCompanyInvitation = (invitationId) => api.post(`/companies/current/invitations/${invitationId}/resend`).then(data);
 export const revokeCompanyInvitation = (invitationId) => api.delete(`/companies/current/invitations/${invitationId}`).then(data);
 export const acceptCompanyInvitation = (token, makeDefault = true) => api.post(`/companies/invitations/${token}/accept`, { makeDefault }).then(data);
 
 export const getCompanyOnboarding = () => api.get("/companies/current/onboarding").then(data);
 export const updateCompanyOnboarding = (payload) => api.patch("/companies/current/onboarding", payload).then(data);
 export const getCompanyActivity = (limit = 50) => api.get("/companies/current/activity", { params: { limit } }).then(data);
+export const getCompanyNotifications = (limit = 20) => api.get("/companies/current/notifications", { params: { limit } }).then(data);

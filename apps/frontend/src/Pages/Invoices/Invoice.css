@@ -1053,6 +1053,90 @@ background-color: #f05c44;
   color: #066a35;
 }
 
+.add-invoice-reference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.add-invoice-reference-row .btn {
+  min-width: 92px;
+  min-height: 42px;
+}
+
+.add-invoice-tools-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.add-invoice-tool-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(16, 24, 40, 0.045);
+}
+
+.add-invoice-tool-card > div {
+  min-width: 0;
+}
+
+.add-invoice-tool-card span {
+  display: block;
+  margin-bottom: 5px;
+  color: #087a3d;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.add-invoice-tool-card strong {
+  display: block;
+  color: #101828;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.add-invoice-tool-card p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.add-invoice-tool-card code {
+  max-width: 240px;
+  padding: 6px 8px;
+  color: #344054;
+  background: #f8fafc;
+  border: 1px solid #edf1f5;
+  border-radius: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.add-invoice-tool-card--payload {
+  display: grid;
+}
+
+.add-invoice-tool-card pre {
+  max-height: 360px;
+  margin: 10px 0 0;
+  padding: 12px;
+  overflow: auto;
+  color: #101828;
+  background: #f8fafc;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 .add-invoice-page .dropdown-menu {
   padding: 6px;
   border: 1px solid #d8dee6;
@@ -1230,6 +1314,16 @@ background-color: #f05c44;
 
   .add-invoice-inline-action .invoice-button {
     width: 100%;
+  }
+
+  .add-invoice-tool-card,
+  .add-invoice-reference-row {
+    grid-template-columns: 1fr;
+  }
+
+  .add-invoice-tool-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .add-invoice-actions {

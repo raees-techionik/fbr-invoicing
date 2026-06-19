@@ -31,6 +31,11 @@ export async function createProductMapping(payload) {
   return response.data.data;
 }
 
+export async function bulkImportProductMappings(products) {
+  const response = await productMappingsApi.post("/bulk-import", { products });
+  return response.data.data;
+}
+
 export async function updateProductMapping(id, payload) {
   const response = await productMappingsApi.put(`/${id}`, payload);
   return response.data.data;
@@ -39,6 +44,13 @@ export async function updateProductMapping(id, payload) {
 export async function deleteProductMapping(id) {
   const response = await productMappingsApi.delete(`/${id}`);
   return response.data.data;
+}
+
+export async function searchHsCodeSuggestions(query, limit = 12) {
+  const response = await productMappingsApi.get("/hs-search", {
+    params: { query, limit },
+  });
+  return response.data.data || [];
 }
 
 export async function resolveHsInvoiceFields({ hsCode, saleType, invoiceDate, originationSupplier, annexureId }) {

@@ -34,7 +34,11 @@ const SIDEBAR_OVERLAY_BREAKPOINT = 900;
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/" replace />;
+  const location = useLocation();
+  if (!token) {
+    const from = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to="/" replace state={{ from }} />;
+  }
   return children;
 }
 

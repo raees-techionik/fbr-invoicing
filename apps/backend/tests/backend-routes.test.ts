@@ -45,6 +45,40 @@ after(async () => {
 });
 
 describe("backend guide-compatible route contracts", () => {
+  test("company notifications are real, scoped, and available to members", async () => {
+    const visible = await prisma.companyActivityLog.create({
+      data: {
+        companyId: defaultCompanyId,
+        actorUserId: registeredUserId,
+        action: "onboarding.updated",
+        summary: "Notification feed test activity.",
+      },
+    });
+    const otherCompany = await prisma.company.create({
+      data: { name: `Notification isolation ${Date.now()}`, kind: "BUSINESS" },
+    });
+    const hidden = await prisma.companyActivityLog.create({
+      data: {
+        companyId: otherCompany.id,
+        action: "company.updated",
+        summary: "This activity belongs to another company.",
+      },
+    });
+
+    try {
+      const response = await getJson("/api/companies/current/notifications?limit=50");
+      const notifications = response.data as Array<Record<string, any>>;
+      assert(notifications.some((item: Record<string, any>) => item.id === `activity:${visible.id}`));
+      assert(!notifications.some((item: Record<string, any>) => item.id === `activity:${hidden.id}`));
+      const item = notifications.find((entry: Record<string, any>) => entry.id === `activity:${visible.id}`);
+      assert.equal(item.href, "/onboarding");
+      assert.equal(item.type, "onboarding");
+    } finally {
+      await prisma.companyActivityLog.deleteMany({ where: { id: { in: [visible.id, hidden.id] } } });
+      await prisma.company.delete({ where: { id: otherCompany.id } });
+    }
+  });
+
   test("authenticated requests resolve and authorize the active company", async () => {
     const marker = `auth-company-${Date.now()}`;
     const selectedCompany = await prisma.company.create({
@@ -213,13 +247,32 @@ describe("backend guide-compatible route contracts", () => {
       const invitationToken = invited.body.data.devInvitationToken;
       assert.equal(typeof invitationToken, "string");
 
-      const wrongUserAcceptance = await requestJson(`/api/companies/invitations/${invitationToken}/accept`, {
+      const resent = await requestJson(`/api/companies/current/invitations/${invited.body.data.id}/resend`, {
+        method: "POST",
+        headers: ownerHeaders,
+      });
+      assert.equal(resent.status, 200);
+      assert.equal(resent.body.data.status, "PENDING");
+      assert.equal(resent.body.data.emailDelivery.status, "DEV_LOGGED");
+      assert.equal(resent.body.data.emailStatus, "DEV_LOGGED");
+      assert.equal(typeof resent.body.data.emailAttemptedAt, "string");
+      assert.equal(typeof resent.body.data.devInvitationToken, "string");
+      assert.notEqual(resent.body.data.devInvitationToken, invitationToken);
+
+      const oldLinkRejected = await requestJson(`/api/companies/invitations/${invitationToken}/accept`, {
+        method: "POST",
+        headers: inviteeHeaders,
+        body: { makeDefault: true },
+      });
+      assert.equal(oldLinkRejected.status, 404);
+
+      const wrongUserAcceptance = await requestJson(`/api/companies/invitations/${resent.body.data.devInvitationToken}/accept`, {
         method: "POST",
         body: { makeDefault: true },
       });
       assert.equal(wrongUserAcceptance.status, 403);
 
-      const accepted = await requestJson(`/api/companies/invitations/${invitationToken}/accept`, {
+      const accepted = await requestJson(`/api/companies/invitations/${resent.body.data.devInvitationToken}/accept`, {
         method: "POST",
         headers: inviteeHeaders,
         body: { makeDefault: true },
@@ -330,6 +383,7 @@ describe("backend guide-compatible route contracts", () => {
         headers: ownerHeaders,
       });
       assert.equal(activity.status, 200);
+      assert.ok(activity.body.data.some((row: Record<string, any>) => row.action === "invitation.resent"));
       assert.ok(activity.body.data.some((row: Record<string, any>) => row.action === "invitation.email"));
       assert.ok(activity.body.data.some((row: Record<string, any>) => row.action === "member.role_updated"));
       assert.ok(activity.body.data.some((row: Record<string, any>) => row.action === "onboarding.updated"));
@@ -939,6 +993,33 @@ describe("backend guide-compatible route contracts", () => {
     }
   });
 
+  test("invoice formatting and reference lookup helpers are exposed", async () => {
+    const marker = `FORMAT-${Date.now()}`;
+
+    const formatted = await requestJson("/api/invoice/format", {
+      method: "POST",
+      body: {
+        invoice: makeInvoicePayload(marker),
+        settings: { environment: "sandbox", useMock: true },
+      },
+    });
+
+    assert.equal(formatted.status, 200);
+    assert.equal(formatted.body.data.endpoint, "format");
+    assert.equal(formatted.body.data.isValid, true);
+    assert.equal(formatted.body.data.payload.invoiceRefNo, marker);
+    assert.equal(formatted.body.data.payload.items[0].hsCode, "0101.2100");
+
+    const lookup = await requestJson(`/api/invoice/reference-lookup?invoiceRefNo=${encodeURIComponent(marker)}&environment=sandbox&useMock=true`, {
+      method: "GET",
+    });
+
+    assert.equal(lookup.status, 200);
+    assert.equal(lookup.body.data.found, true);
+    assert.equal(lookup.body.data.invoiceRefNo, marker);
+    assert.equal(lookup.body.data.source, "mock");
+  });
+
   test("offline queue failed and retry aliases are available", async () => {
     const marker = `QUEUE-${Date.now()}`;
     const invoice = await prisma.invoice.create({
@@ -1241,6 +1322,85 @@ describe("backend guide-compatible route contracts", () => {
     }
   });
 
+  test("product HS search and resolve helpers return invoice-ready reference fields", async () => {
+    const fetchedAt = new Date();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const cacheEntries = [
+      {
+        cacheKey: "fbr:reference:itemDescriptions",
+        key: "itemDescriptions",
+        data: [{ hsCode: "0101.2100", description: "Pure-bred breeding horses" }],
+      },
+      {
+        cacheKey: "fbr:reference:transactionTypes",
+        key: "transactionTypes",
+        data: [{ id: "75", description: "Goods at standard rate (default)" }],
+      },
+      {
+        cacheKey: "fbr:reference:hsUoms?annexure_id=75&hs_code=0101.2100",
+        key: "hsUoms",
+        data: [{ id: "13", description: "KG" }],
+      },
+      {
+        cacheKey: "fbr:reference:saleTypeRates?date=2026-05-08&originationSupplier=Punjab&transTypeId=75",
+        key: "saleTypeRates",
+        data: [{ id: "734", description: "18%", value: "18" }],
+      },
+    ];
+
+    try {
+      for (const entry of cacheEntries) {
+        await prisma.referenceCache.upsert({
+          where: { cacheKey: entry.cacheKey },
+          create: {
+            cacheKey: entry.cacheKey,
+            fetchedAt,
+            expiresAt,
+            data: {
+              key: entry.key,
+              source: "mock",
+              cacheHit: false,
+              fetchedAt: fetchedAt.toISOString(),
+              data: entry.data,
+              raw: entry.data,
+            },
+          },
+          update: {
+            fetchedAt,
+            expiresAt,
+            data: {
+              key: entry.key,
+              source: "mock",
+              cacheHit: false,
+              fetchedAt: fetchedAt.toISOString(),
+              data: entry.data,
+              raw: entry.data,
+            },
+          },
+        });
+      }
+
+      const search = await requestJson("/api/products/hs-search?query=horse&limit=5", { method: "GET" });
+      assert.equal(search.status, 200);
+      assert.equal(search.body.data[0].hsCode, "0101.2100");
+
+      const resolved = await getJson("/api/products/resolve?hsCode=0101.2100&saleType=Goods%20at%20standard%20rate%20(default)&invoiceDate=2026-05-08&originationSupplier=Punjab");
+      assert.equal(resolved.data.hsCode, "0101.2100");
+      assert.equal(resolved.data.hsDescription, "Pure-bred breeding horses");
+      assert.equal(resolved.data.salesTaxRate, "18");
+      assert.equal(resolved.data.unitOfMeasurement, "KG");
+      assert.equal(resolved.data.saleType, "Goods at standard rate (default)");
+    } finally {
+      await prisma.referenceCache.deleteMany({
+        where: {
+          cacheKey: {
+            in: cacheEntries.map((entry) => entry.cacheKey),
+          },
+        },
+      });
+    }
+  });
+
   test("reference route aliases accept guide-compatible query parameter names", async () => {
     const fetchedAt = new Date();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
@@ -1424,6 +1584,56 @@ describe("backend guide-compatible route contracts", () => {
       } else {
         await prisma.product.deleteMany({ where: { name: marker } });
       }
+    }
+  });
+
+  test("product bulk import creates valid rows and reports invalid rows", async () => {
+    const marker = `BULK-PRODUCT-${Date.now()}`;
+
+    try {
+      const imported = await requestJson("/api/products/bulk-import", {
+        method: "POST",
+        body: {
+          products: [
+            {
+              productName: `${marker} Valid`,
+              hsCode: "0101.2100",
+              hsDescription: "Bulk import valid product",
+              salesTaxRate: 18,
+              unitOfMeasurement: "KG",
+              saleType: "Goods at standard rate",
+              status: "Active",
+            },
+            {
+              hsCode: "0101.2100",
+              hsDescription: "Missing name should fail",
+              salesTaxRate: 18,
+              unitOfMeasurement: "KG",
+              saleType: "Goods at standard rate",
+            },
+          ],
+        },
+      });
+
+      assert.equal(imported.status, 200);
+      assert.equal(imported.body.data.total, 2);
+      assert.equal(imported.body.data.created, 1);
+      assert.equal(imported.body.data.failed, 1);
+      assert.equal(imported.body.data.results[0].status, "created");
+      assert.equal(imported.body.data.results[1].status, "error");
+      assert.match(imported.body.data.results[1].error, /productName is required/);
+
+      const list = await getJson(`/api/products?search=${encodeURIComponent(marker)}`);
+      assert.equal(list.data.length, 1);
+      assert.equal(list.data[0].productName, `${marker} Valid`);
+    } finally {
+      await prisma.product.deleteMany({
+        where: {
+          name: {
+            contains: marker,
+          },
+        },
+      });
     }
   });
 

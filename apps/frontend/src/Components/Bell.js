@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import img from '../Images/TechionikIcon.png';
-import { FiBell } from 'react-icons/fi';
 import { Link, useNavigate } from 'react-router-dom';
 import { IoHelpCircleOutline } from 'react-icons/io5';
 import { IoIosLogOut } from 'react-icons/io';
 import { RiAccountCircleLine } from "react-icons/ri";
+import NotificationMenu from './NotificationMenu';
 
 const Bell = () => {
  const emails = localStorage.getItem('email');
@@ -38,26 +38,11 @@ const Bell = () => {
 
   return (
     <div className='d-flex align-items-center gap-3' ref={menuRef}>
-      <div className="dropdown">
-                  <button
-                    className="position-relative bell-icon topbar-menu-button"
-                    type="button"
-                    aria-label="Notifications"
-                    aria-haspopup="menu"
-                    aria-expanded={openMenu === 'notifications'}
-                    onClick={() => setOpenMenu(openMenu === 'notifications' ? null : 'notifications')}
-                  >
-                    <FiBell size={22} />
-                    <span className="notification-dot"></span>
-                  </button>
-                  <ul className={`dropdown-menu dropdown-menu-end shadow-sm ${openMenu === 'notifications' ? 'show' : ''}`}>
-                    <li><span className="dropdown-item-text fw-bold">Notifications</span></li>
-                    <li><hr className="dropdown-divider" /></li>
-                    <li><a className="dropdown-item" href="#">New message received</a></li>
-                    <li><a className="dropdown-item" href="#">Product updated</a></li>
-                    <li><a className="dropdown-item" href="#">System maintenance</a></li>
-                  </ul>
-                </div>
+      <NotificationMenu
+        open={openMenu === 'notifications'}
+        onToggle={(open) => setOpenMenu(open ? 'notifications' : null)}
+        onClose={() => setOpenMenu(null)}
+      />
 
                 <div className="dropdown">
                   <button

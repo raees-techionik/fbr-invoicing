@@ -359,6 +359,7 @@ export async function inviteCompanyMember(companyId: string, actor: CompanyActor
   });
 
   return {
+    id: invitation.id,
     email,
     role: data.role,
     status: "PENDING",
@@ -377,6 +378,71 @@ export async function listCompanyInvitations(companyId: string, actor: CompanyAc
     orderBy: { createdAt: "desc" },
   });
   return invitations.map(invitationDto);
+}
+
+export async function resendCompanyInvitation(companyId: string, actor: CompanyActor, invitationId: string) {
+  requireCompanyAdmin(actor);
+  await expireInvitations(companyId);
+  const invitation = await prisma.companyInvitation.findFirst({
+    where: { id: invitationId, companyId, status: { in: ["PENDING", "EXPIRED"] } },
+  });
+  if (!invitation) throw httpError(404, "Pending or expired invitation not found.");
+  assertCanAssignRole(actor, invitation.role);
+
+  const existingUser = await prisma.user.findUnique({ where: { email: invitation.email } });
+  if (existingUser) {
+    const existingMembership = await prisma.userCompanyMembership.findUnique({
+      where: { userId_companyId: { userId: existingUser.id, companyId } },
+    });
+    if (existingMembership) throw httpError(409, "This user is already a company member.");
+  }
+
+  const token = makeInvitationToken();
+  const expiry = invitationExpiry();
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.companyInvitation.update({
+      where: { id: invitation.id },
+      data: {
+        status: "PENDING",
+        tokenHash: hashToken(token),
+        expiresAt: expiry,
+        emailStatus: "NOT_SENT",
+        emailSentAt: null,
+        emailError: null,
+        emailAttemptedAt: null,
+        revokedAt: null,
+      },
+    });
+    await recordCompanyActivity(tx, {
+      companyId,
+      actor,
+      action: "invitation.resent",
+      summary: `Invitation for ${invitation.email} was resent.`,
+      metadata: { invitationId: invitation.id, email: invitation.email, role: invitation.role, expiresAt: expiry.toISOString() },
+    });
+  });
+
+  const emailDelivery = await sendInvitationEmailAndUpdate({
+    invitationId: invitation.id,
+    companyId,
+    email: invitation.email,
+    role: invitation.role,
+    token,
+    actor,
+    action: "invitation.email",
+  });
+
+  const updated = await prisma.companyInvitation.findUnique({
+    where: { id: invitation.id },
+    include: { invitedBy: { select: { id: true, email: true, fullName: true } } },
+  });
+  if (!updated) throw httpError(404, "Invitation not found after resend.");
+
+  return {
+    ...invitationDto(updated),
+    emailDelivery,
+    ...(shouldExposeInvitationToken(emailDelivery) ? { devInvitationToken: token } : {}),
+  };
 }
 
 export async function revokeCompanyInvitation(companyId: string, actor: CompanyActor, invitationId: string) {
@@ -549,6 +615,73 @@ export async function listCompanyActivity(companyId: string, actor: CompanyActor
     take: limit,
   });
   return logs.map(activityDto);
+}
+
+export async function listCompanyNotifications(companyId: string, limitRaw: unknown = 20) {
+  const limit = Math.min(Math.max(Number(limitRaw) || 20, 1), 50);
+  const sourceLimit = Math.min(limit, 20);
+  const [activity, sandboxFailures, invoices] = await Promise.all([
+    prisma.companyActivityLog.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      take: sourceLimit,
+    }),
+    prisma.sandboxResult.findMany({
+      where: { companyId, status: "FAILED" },
+      orderBy: { runAt: "desc" },
+      take: sourceLimit,
+      select: { id: true, scenarioId: true, scenarioName: true, runAt: true },
+    }),
+    prisma.invoice.findMany({
+      where: { companyId, status: { in: ["SUBMITTED", "FAILED", "OFFLINE"] } },
+      orderBy: { updatedAt: "desc" },
+      take: sourceLimit,
+      select: {
+        id: true,
+        status: true,
+        fbrInvoiceNumber: true,
+        invoiceRefNo: true,
+        buyerBusinessName: true,
+        updatedAt: true,
+      },
+    }),
+  ]);
+
+  const notifications = [
+    ...activity.map((item) => ({
+      id: `activity:${item.id}`,
+      type: notificationTypeForAction(item.action),
+      severity: notificationSeverityForAction(item.action),
+      title: notificationTitleForAction(item.action),
+      message: item.summary,
+      createdAt: item.createdAt.toISOString(),
+      href: item.action.startsWith("invitation.") || item.action.startsWith("member.") || item.action.startsWith("onboarding.")
+        ? "/onboarding"
+        : null,
+    })),
+    ...sandboxFailures.map((item) => ({
+      id: `sandbox:${item.id}`,
+      type: "sandbox",
+      severity: "danger",
+      title: "Sandbox scenario failed",
+      message: `${item.scenarioId}${item.scenarioName ? ` - ${item.scenarioName}` : ""} needs attention.`,
+      createdAt: item.runAt.toISOString(),
+      href: "/sandbox",
+    })),
+    ...invoices.map((item) => ({
+      id: `invoice:${item.id}:${item.status}:${item.updatedAt.toISOString()}`,
+      type: "invoice",
+      severity: item.status === "FAILED" ? "danger" : item.status === "OFFLINE" ? "warning" : "success",
+      title: item.status === "FAILED" ? "Invoice submission failed" : item.status === "OFFLINE" ? "Invoice queued offline" : "Invoice submitted",
+      message: `${item.fbrInvoiceNumber || item.invoiceRefNo || "Invoice"}${item.buyerBusinessName ? ` for ${item.buyerBusinessName}` : ""}.`,
+      createdAt: item.updatedAt.toISOString(),
+      href: item.status === "OFFLINE" ? "/invoice/offline-queue" : "/invoice",
+    })),
+  ];
+
+  return notifications
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, limit);
 }
 
 export async function updateCompanyOnboarding(companyId: string, actor: CompanyActor, raw: unknown) {
@@ -893,6 +1026,38 @@ function activityDto(activity: {
     createdAt: activity.createdAt.toISOString(),
     actor: activity.actor,
   };
+}
+
+function notificationTypeForAction(action: string) {
+  if (action.startsWith("invitation.")) return "invitation";
+  if (action.startsWith("member.")) return "member";
+  if (action.startsWith("onboarding.")) return "onboarding";
+  return "company";
+}
+
+function notificationSeverityForAction(action: string) {
+  if (action.includes("failed") || action.includes("revoked") || action.includes("removed")) return "warning";
+  if (action.includes("accepted") || action.includes("assigned") || action.includes("created")) return "success";
+  return "info";
+}
+
+function notificationTitleForAction(action: string) {
+  const titles: Record<string, string> = {
+    "company.created": "Company created",
+    "company.updated": "Company updated",
+    "company.owner_assigned": "Owner assigned",
+    "company.owner_invited": "Owner invited",
+    "invitation.created": "Invitation created",
+    "invitation.accepted": "Invitation accepted",
+    "invitation.resent": "Invitation resent",
+    "invitation.revoked": "Invitation revoked",
+    "invitation.email": "Invitation email updated",
+    "invitation.owner_email": "Owner invitation updated",
+    "member.role_updated": "Member role updated",
+    "member.removed": "Member removed",
+    "onboarding.updated": "Onboarding updated",
+  };
+  return titles[action] || "Company activity";
 }
 
 function makeInvitationToken() {

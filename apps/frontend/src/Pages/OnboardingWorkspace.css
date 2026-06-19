@@ -345,10 +345,11 @@
 .onboarding-table td > span:not(.onboarding-status) { display: block; margin-top: 3px; color: #667085; font-size: 12px; }
 .onboarding-table select { max-width: 140px; height: 34px; padding: 0 8px; }
 .onboarding-table th:last-child,
-.onboarding-table td:last-child { width: 50px; text-align: right; }
+.onboarding-table td:last-child { width: 92px; text-align: right; }
 .onboarding-empty { padding: 28px !important; color: #667085 !important; text-align: center !important; }
 .onboarding-icon-button.danger { color: #b42318; border-color: transparent; background: transparent; }
 .onboarding-icon-button.danger:hover { background: #fff1f0; }
+.onboarding-action-group { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
 
 .onboarding-status {
   display: inline-flex;

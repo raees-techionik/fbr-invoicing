@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FiEdit, FiRefreshCw, FiSearch, FiTrash2 } from 'react-icons/fi';
+import * as XLSX from 'xlsx';
+import { FiDownload, FiEdit, FiRefreshCw, FiSearch, FiTrash2, FiUpload } from 'react-icons/fi';
 import { LuEye } from 'react-icons/lu';
 import useBlockBackButton from '../Components/useBlockBackButton';
 import { FaPlus } from 'react-icons/fa6';
 import { hsCodes, hsCodeLookup } from '../Components/hsCodes';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { getCompanyProfile } from '../services/companyProfileApi';
 import { getFbrReferenceBootstrap } from '../services/fbrReferenceApi';
 import {
+  bulkImportProductMappings,
   createProductMapping,
   deleteProductMapping,
   getProductMapping,
   getProductMappings,
+  resolveHsInvoiceFields,
+  searchHsCodeSuggestions,
   updateProductMapping,
 } from '../services/fbrProductMappingsApi';
 import './Products.css';
@@ -35,6 +40,20 @@ const emptyReferenceData = {
   hsCodes: [],
   uoms: [],
   transactionTypes: [],
+};
+
+const importColumnAliases = {
+  productName: ['productName', 'product_name', 'product name', 'name', 'product'],
+  hsCode: ['hsCode', 'hs_code', 'hs code', 'hscode'],
+  hsDescription: ['hsDescription', 'hs_description', 'description', 'hs description', 'product description'],
+  salesTaxRate: ['salesTaxRate', 'sales_tax_rate', 'sales tax rate', 'rate', 'tax rate'],
+  unitOfMeasurement: ['unitOfMeasurement', 'unit_of_measure', 'unit of measure', 'unit_of_measurement', 'uom', 'uoM'],
+  inStock: ['inStock', 'in_stock', 'in stock', 'stock'],
+  saleType: ['saleType', 'sale_type', 'sale type', 'transaction type'],
+  sroScheduleNo: ['sroScheduleNo', 'sro_schedule_no', 'sro schedule no', 'sro'],
+  status: ['status', 'active'],
+  furtherTaxApplicable: ['furtherTaxApplicable', 'further_tax_applicable', 'further tax applicable'],
+  extraTaxApplicable: ['extraTaxApplicable', 'extra_tax_applicable', 'extra tax applicable'],
 };
 
 const unwrapReferenceList = (entry) => Array.isArray(entry?.data) ? entry.data : [];
@@ -62,6 +81,28 @@ const productDescription = (product) => product.description || product.hsDescrip
 const productStatus = (product) => product.status || 'Active';
 const productSaleType = (product) => product.sale_type || product.saleType || '';
 
+const normalizeHeader = (value) => String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+const normalizeHs = (value) => String(value || '').trim().replace(/\s+/g, '').toLowerCase();
+
+const getImportCell = (row, field) => {
+  const aliases = importColumnAliases[field] || [field];
+  const normalizedRow = Object.entries(row).reduce((acc, [key, value]) => {
+    acc[normalizeHeader(key)] = value;
+    return acc;
+  }, {});
+
+  for (const alias of aliases) {
+    const value = normalizedRow[normalizeHeader(alias)];
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return String(value).trim();
+    }
+  }
+
+  return '';
+};
+
+const parseImportBoolean = (value) => ['true', 'yes', 'y', '1'].includes(String(value || '').trim().toLowerCase());
+
 function Products() {
   useBlockBackButton();
   const [products, setProducts] = useState([]);
@@ -69,7 +110,15 @@ function Products() {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [formData, setFormData] = useState(emptyProductForm);
   const [referenceData, setReferenceData] = useState(emptyReferenceData);
+  const [sellerProvince, setSellerProvince] = useState('');
+  const [hsSearch, setHsSearch] = useState('');
+  const [hsSuggestions, setHsSuggestions] = useState([]);
+  const [productNotice, setProductNotice] = useState('');
   const [apiError, setApiError] = useState('');
+  const [importError, setImportError] = useState('');
+  const [importFileName, setImportFileName] = useState('');
+  const [importRows, setImportRows] = useState([]);
+  const [importResult, setImportResult] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,6 +130,9 @@ function Products() {
     fetchSingle: false,
     fetchSingleEdit: false,
     fetchSingleView: false,
+    hsSearch: false,
+    autofill: false,
+    import: false,
   });
   const itemsPerPage = 8;
   const modalRef = useRef();
@@ -92,6 +144,7 @@ function Products() {
   useEffect(() => {
     fetchProducts();
     loadProductReferences();
+    loadSellerProfile();
   }, []);
 
   const fetchProducts = async () => {
@@ -177,6 +230,7 @@ function Products() {
           further_tax_applicable: Boolean(product.further_tax_applicable ?? product.furtherTaxApplicable),
           extra_tax_applicable: Boolean(product.extra_tax_applicable ?? product.extraTaxApplicable),
         });
+        setHsSearch(`${product.hs_code || product.hsCode || ''}${product.description || product.hsDescription ? ` - ${product.description || product.hsDescription}` : ''}`.trim());
         setApiError('');
       } catch (error) {
         console.error('Error fetching product:', error);
@@ -192,8 +246,11 @@ function Products() {
     } else {
       setFormData(emptyProductForm);
       setEditingProduct(null);
+      setHsSearch('');
     }
     setApiError('');
+    setProductNotice('');
+    setHsSuggestions([]);
     setIsReadOnly(viewOnly);
     window.bootstrap.Modal.getOrCreateInstance(modalRef.current).show();
   };
@@ -210,6 +267,9 @@ function Products() {
         description: selectedHsCode?.description || hsCodeLookup[inputValue] || prev.description,
         tax: 0,
       }));
+      if (inputValue) {
+        setHsSearch(`${inputValue}${selectedHsCode?.description || hsCodeLookup[inputValue] ? ` - ${selectedHsCode?.description || hsCodeLookup[inputValue]}` : ''}`);
+      }
     } else {
       setFormData(prev => ({
         ...prev,
@@ -286,6 +346,232 @@ function Products() {
     }
   };
 
+  const handleHsSearchChange = async (event) => {
+    const value = event.target.value;
+    setHsSearch(value);
+    setProductNotice('');
+    if (value.trim().length < 2) {
+      setHsSuggestions([]);
+      return;
+    }
+
+    setLoading(prev => ({ ...prev, hsSearch: true }));
+    try {
+      const suggestions = await searchHsCodeSuggestions(value.trim(), 12);
+      setHsSuggestions(suggestions);
+    } catch (error) {
+      console.error('Failed to search HS codes:', error);
+      setHsSuggestions([]);
+      setProductNotice('HS search is unavailable. You can still select a code manually.');
+    } finally {
+      setLoading(prev => ({ ...prev, hsSearch: false }));
+    }
+  };
+
+  const selectHsSuggestion = (suggestion) => {
+    setFormData(prev => ({
+      ...prev,
+      hs_code: suggestion.hsCode || '',
+      description: suggestion.description || prev.description,
+    }));
+    setHsSearch(`${suggestion.hsCode}${suggestion.description ? ` - ${suggestion.description}` : ''}`);
+    setHsSuggestions([]);
+    setProductNotice('HS code and description filled from FBR reference data.');
+  };
+
+  const autofillFbrFields = async () => {
+    if (!formData.hs_code) {
+      setProductNotice('Select an HS code before autofill.');
+      return;
+    }
+
+    setLoading(prev => ({ ...prev, autofill: true }));
+    setProductNotice('');
+    setApiError('');
+    try {
+      const resolved = await resolveHsInvoiceFields({
+        hsCode: formData.hs_code,
+        saleType: formData.sale_type,
+        invoiceDate: new Date().toISOString().slice(0, 10),
+        originationSupplier: sellerProvince,
+      });
+      setFormData(prev => ({
+        ...prev,
+        description: resolved.hsDescription || prev.description,
+        sale_type: resolved.saleType || prev.sale_type,
+        rate: resolved.salesTaxRate !== undefined && resolved.salesTaxRate !== '' ? resolved.salesTaxRate : prev.rate,
+        unit_of_measure: resolved.unitOfMeasurement || prev.unit_of_measure,
+      }));
+      setHsSearch(`${resolved.hsCode || formData.hs_code}${resolved.hsDescription ? ` - ${resolved.hsDescription}` : ''}`);
+      setHsSuggestions([]);
+      setProductNotice(resolved.salesTaxRate
+        ? 'FBR fields autofilled from HS code, sale type, and seller province.'
+        : 'Description and UOM were autofilled. Add seller province in Company Profile for rate lookup if needed.');
+    } catch (error) {
+      console.error('Failed to autofill product fields:', error);
+      setApiError(error.response?.data?.error || error.message || 'Unable to autofill FBR product fields.');
+    } finally {
+      setLoading(prev => ({ ...prev, autofill: false }));
+    }
+  };
+
+  const loadSellerProfile = async () => {
+    try {
+      const profile = await getCompanyProfile();
+      setSellerProvince((profile?.province || '').toUpperCase());
+    } catch (error) {
+      console.error('Failed to load seller profile for product autofill:', error);
+      setSellerProvince('');
+    }
+  };
+
+  const buildImportRows = (rawRows) => {
+    const hsReference = referenceData.hsCodes.length
+      ? referenceData.hsCodes.map(item => ({ code: item.hsCode, description: item.description }))
+      : hsCodes.map(item => ({ code: item.code, description: item.description }));
+    const hsReferenceMap = new Map(hsReference.map(item => [normalizeHs(item.code), item]));
+    const knownUoms = new Set(uomOptions.map(item => String(item.value).trim().toLowerCase()).filter(Boolean));
+    const knownSaleTypes = new Set(saleTypeOptions.map(item => String(item.value).trim().toLowerCase()).filter(Boolean));
+
+    return rawRows
+      .filter(row => Object.values(row).some(value => String(value || '').trim() !== ''))
+      .map((row, index) => {
+        const hsCode = getImportCell(row, 'hsCode');
+        const hsMatch = hsReferenceMap.get(normalizeHs(hsCode));
+        const payload = {
+          productName: getImportCell(row, 'productName'),
+          hsCode,
+          hsDescription: getImportCell(row, 'hsDescription') || hsMatch?.description || '',
+          salesTaxRate: getImportCell(row, 'salesTaxRate'),
+          unitOfMeasurement: getImportCell(row, 'unitOfMeasurement'),
+          inStock: getImportCell(row, 'inStock'),
+          saleType: getImportCell(row, 'saleType') || 'Goods at standard rate (default)',
+          sroScheduleNo: getImportCell(row, 'sroScheduleNo'),
+          status: getImportCell(row, 'status') || 'Active',
+          furtherTaxApplicable: parseImportBoolean(getImportCell(row, 'furtherTaxApplicable')),
+          extraTaxApplicable: parseImportBoolean(getImportCell(row, 'extraTaxApplicable')),
+        };
+        const errors = [];
+        if (!payload.productName) errors.push('Product name is required');
+        if (!payload.hsCode) errors.push('HS code is required');
+        if (payload.hsCode && hsReferenceMap.size > 0 && !hsMatch) errors.push('HS code was not found in loaded FBR references');
+        if (!payload.hsDescription) errors.push('Description is required');
+        if (!payload.unitOfMeasurement) errors.push('UOM is required');
+        if (payload.unitOfMeasurement && knownUoms.size > 0 && !knownUoms.has(payload.unitOfMeasurement.toLowerCase())) errors.push('UOM is not in loaded FBR references');
+        if (!payload.saleType) errors.push('Sale type is required');
+        if (payload.saleType && knownSaleTypes.size > 0 && !knownSaleTypes.has(payload.saleType.toLowerCase())) errors.push('Sale type is not in loaded FBR references');
+        if (payload.salesTaxRate !== '' && Number.isNaN(Number(String(payload.salesTaxRate).replace('%', '')))) errors.push('Sales tax rate must be numeric');
+
+        return {
+          rowNumber: index + 2,
+          payload: {
+            ...payload,
+            salesTaxRate: payload.salesTaxRate === '' ? 0 : Number(String(payload.salesTaxRate).replace('%', '')),
+          },
+          errors,
+          status: errors.length ? 'invalid' : 'ready',
+        };
+      });
+  };
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setImportResult(null);
+    setImportError('');
+    setImportRows([]);
+    setImportFileName(file?.name || '');
+    if (!file) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheet = workbook.SheetNames[0];
+      if (!firstSheet) {
+        setImportError('No worksheet was found in the selected file.');
+        return;
+      }
+      const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: '' });
+      const rows = buildImportRows(rawRows);
+      if (rows.length === 0) {
+        setImportError('No product rows were found in the selected file.');
+        return;
+      }
+      setImportRows(rows);
+    } catch (error) {
+      console.error('Failed to parse product import file:', error);
+      setImportError('Could not read this file. Please upload a CSV or Excel file.');
+    }
+  };
+
+  const handleImportProducts = async () => {
+    const readyRows = importRows.filter(row => row.status === 'ready');
+    if (readyRows.length === 0) {
+      setImportError('No valid rows are ready to import.');
+      return;
+    }
+
+    setLoading(prev => ({ ...prev, import: true }));
+    setImportError('');
+    try {
+      const result = await bulkImportProductMappings(readyRows.map(row => row.payload));
+      const resultByImportIndex = new Map((result.results || []).map(item => [item.index, item]));
+      let readyIndex = 0;
+      const rowsWithResult = importRows.map(row => {
+        if (row.status !== 'ready') return row;
+        const rowResult = resultByImportIndex.get(readyIndex++);
+        if (rowResult?.status === 'created') return { ...row, status: 'created', createdId: rowResult.id };
+        return { ...row, status: 'failed', errors: [rowResult?.error || 'Import failed'] };
+      });
+      setImportRows(rowsWithResult);
+      setImportResult({
+        total: importRows.length,
+        submitted: readyRows.length,
+        created: result.created || 0,
+        failed: result.failed || 0,
+        skipped: importRows.length - readyRows.length,
+      });
+      await fetchProducts();
+    } catch (error) {
+      console.error('Failed to import products:', error);
+      setImportError(error.response?.data?.error || error.message || 'Product import failed.');
+    } finally {
+      setLoading(prev => ({ ...prev, import: false }));
+    }
+  };
+
+  const clearImport = () => {
+    setImportRows([]);
+    setImportResult(null);
+    setImportError('');
+    setImportFileName('');
+  };
+
+  const downloadImportTemplate = () => {
+    const rows = [{
+      productName: 'Sample Product',
+      hsCode: '0101.2100',
+      hsDescription: 'Pure-bred breeding horses',
+      salesTaxRate: 18,
+      unitOfMeasurement: 'KG',
+      inStock: 10,
+      saleType: 'Goods at standard rate (default)',
+      sroScheduleNo: '',
+      status: 'Active',
+      furtherTaxApplicable: 'No',
+      extraTaxApplicable: 'No',
+    }];
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const csv = XLSX.utils.sheet_to_csv(worksheet);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'product-import-template.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filteredProducts = (products || []).filter(product => {
     if (!product) return false;
     const term = searchTerm.toLowerCase();
@@ -327,6 +613,10 @@ function Products() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+  const importReadyCount = importRows.filter(row => row.status === 'ready').length;
+  const importInvalidCount = importRows.filter(row => row.status === 'invalid').length;
+  const importCreatedCount = importRows.filter(row => row.status === 'created').length;
+  const importFailedCount = importRows.filter(row => row.status === 'failed').length;
 
   const Spinner = ({ sm } = {}) => (
     <span className={`spinner-border${sm ? ' spinner-border-sm' : ' spinner-border-sm'}`} role="status">
@@ -407,6 +697,83 @@ function Products() {
           <strong className="success">{mappedHsCount}</strong>
         </div>
       </div>
+
+      <section className="products-import-panel">
+        <div className="products-panel__top">
+          <div>
+            <h2>Bulk Import</h2>
+            <p>Upload a CSV or Excel file, review validation results, then import the rows that are ready.</p>
+          </div>
+          <div className="products-header__actions">
+            <button className="products-secondary-action" type="button" onClick={downloadImportTemplate}>
+              <FiDownload size={16} /> Template
+            </button>
+            <label className="products-secondary-action products-upload-action">
+              <FiUpload size={16} /> Choose file
+              <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImportFile} />
+            </label>
+          </div>
+        </div>
+
+        {importFileName && (
+          <div className="products-import-summary">
+            <div><span>File</span><strong>{importFileName}</strong></div>
+            <div><span>Ready</span><strong className="success">{importReadyCount}</strong></div>
+            <div><span>Needs Fix</span><strong className={importInvalidCount ? 'danger' : ''}>{importInvalidCount}</strong></div>
+            <div><span>Imported</span><strong className="success">{importCreatedCount}</strong></div>
+            <div><span>Failed</span><strong className={importFailedCount ? 'danger' : ''}>{importFailedCount}</strong></div>
+          </div>
+        )}
+
+        {importError && <div className="products-error">{importError}</div>}
+        {importResult && (
+          <div className={`products-import-result ${importResult.failed ? 'warning' : 'success'}`}>
+            Imported {importResult.created} of {importResult.submitted} submitted rows. {importResult.skipped} invalid row{importResult.skipped === 1 ? '' : 's'} skipped.
+          </div>
+        )}
+
+        {importRows.length > 0 && (
+          <>
+            <div className="products-import-actions">
+              <button className="products-primary-action" type="button" onClick={handleImportProducts} disabled={loading.import || importReadyCount === 0}>
+                {loading.import ? <Spinner sm /> : <><FiUpload size={16} /> Import ready rows</>}
+              </button>
+              <button className="products-secondary-action" type="button" onClick={clearImport} disabled={loading.import}>Clear import</button>
+            </div>
+            <div className="products-table-wrap products-import-table-wrap">
+              <table className="products-table products-import-table">
+                <thead>
+                  <tr>
+                    <th>Row</th>
+                    <th>Product</th>
+                    <th>HS Code</th>
+                    <th>Rate</th>
+                    <th>UOM</th>
+                    <th>Sale Type</th>
+                    <th>Status</th>
+                    <th>Feedback</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.slice(0, 25).map(row => (
+                    <tr key={row.rowNumber}>
+                      <td className="products-ref">{row.rowNumber}</td>
+                      <td><strong>{row.payload.productName || '-'}</strong><span>{row.payload.hsDescription || 'No description'}</span></td>
+                      <td className="products-ref">{row.payload.hsCode || '-'}</td>
+                      <td>{row.payload.salesTaxRate !== '' ? `${row.payload.salesTaxRate}%` : '-'}</td>
+                      <td>{row.payload.unitOfMeasurement || '-'}</td>
+                      <td>{row.payload.saleType || '-'}</td>
+                      <td><span className={`products-status ${['ready', 'created'].includes(row.status) ? 'success' : row.status === 'invalid' || row.status === 'failed' ? 'danger' : 'neutral'}`}>{row.status}</span></td>
+                      <td>{row.errors?.length ? row.errors.join('; ') : row.createdId ? `Created #${row.createdId}` : 'Ready to import'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importRows.length > 25 && <div className="products-import-limit">Showing first 25 of {importRows.length} parsed rows.</div>}
+            </div>
+          </>
+        )}
+      </section>
 
       <section className="products-panel">
         <div className="products-panel__top">
@@ -548,6 +915,7 @@ function Products() {
 
             <div className="products-modal__body">
               {apiError && <div className="products-error">{apiError}</div>}
+              {productNotice && <div className="products-notice">{productNotice}</div>}
               {loading.fetchSingle && editingProduct ? (
                 <div className="products-modal-loading"><Spinner sm /> Loading product data...</div>
               ) : (
@@ -569,6 +937,32 @@ function Products() {
                           <option key={uom.value} value={uom.value}>{uom.label}</option>
                         ))}
                       </select>
+                    </label>
+                    <label className="products-form-grid__wide products-hs-search-field">
+                      <span>HS Code Search</span>
+                      <div className="products-hs-search-row">
+                        <input
+                          type="search"
+                          value={hsSearch}
+                          onChange={handleHsSearchChange}
+                          disabled={isReadOnly}
+                          placeholder="Search HS code or description"
+                        />
+                        <button type="button" className="products-secondary-action" onClick={autofillFbrFields} disabled={isReadOnly || loading.autofill || !formData.hs_code}>
+                          {loading.autofill ? <Spinner sm /> : 'Autofill'}
+                        </button>
+                      </div>
+                      {hsSuggestions.length > 0 && (
+                        <div className="products-hs-suggestions">
+                          {hsSuggestions.map((suggestion) => (
+                            <button key={suggestion.hsCode} type="button" onClick={() => selectHsSuggestion(suggestion)}>
+                              <strong>{suggestion.hsCode}</strong>
+                              <span>{suggestion.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {loading.hsSearch && <small>Searching FBR references...</small>}
                     </label>
                     <label>
                       <span>HS Code</span>

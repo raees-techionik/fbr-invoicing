@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { FiArrowRight, FiBriefcase, FiLock, FiMail, FiPhone, FiUser } from "react-icons/fi";
 import logo from "./Images/New Black Logo 1.png";
@@ -19,6 +19,10 @@ const Signup = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = typeof location.state?.from === "string" && location.state.from.startsWith("/") && !location.state.from.startsWith("//")
+    ? location.state.from
+    : "/dashboard";
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
@@ -47,7 +51,12 @@ const Signup = () => {
         ...(form.personalWorkspaceName.trim() && { personalWorkspaceName: form.personalWorkspaceName.trim() }),
       });
 
-      navigate("/", { state: { successMessage: "Account created! Please log in." } });
+      navigate("/", {
+        state: {
+          successMessage: "Account created! Please log in.",
+          from: returnTo,
+        },
+      });
     } catch (err) {
       if (err.response?.status === 409) {
         setError("An account with this email already exists.");
@@ -174,7 +183,7 @@ const Signup = () => {
           </button>
 
           <p className="signup-login-link">
-            Already have an account? <Link to="/">Log in</Link>
+            Already have an account? <Link to="/" state={{ from: returnTo }}>Log in</Link>
           </p>
         </form>
 

@@ -17,6 +17,9 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const successMessage = location.state?.successMessage || "";
+  const returnTo = typeof location.state?.from === "string" && location.state.from.startsWith("/") && !location.state.from.startsWith("//")
+    ? location.state.from
+    : "/dashboard";
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -42,7 +45,7 @@ const Login = () => {
       localStorage.setItem("email", user.email);
       setActiveCompanyId(activeCompany?.id);
 
-      navigate("/dashboard");
+      navigate(returnTo, { replace: true });
     } catch (err) {
       console.error("Login failed", err);
       setError("Invalid email or password. Please try again.");
@@ -129,7 +132,7 @@ const Login = () => {
           </button>
 
           <p className="login-signup-link">
-            Don't have an account? <Link to="/signup">Sign up</Link>
+            Don't have an account? <Link to="/signup" state={{ from: returnTo }}>Sign up</Link>
           </p>
         </form>
 
