@@ -104,6 +104,91 @@
   font-weight: 800;
 }
 
+.company-switcher {
+  display: grid;
+  gap: 6px;
+  margin: -6px 0 14px;
+  padding: 10px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.company-switcher__label {
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.company-switcher__control {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+}
+
+.company-switcher__control svg {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.company-switcher__control svg:last-child {
+  justify-self: end;
+}
+
+.company-switcher__control select {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 0 20px 0 25px;
+  overflow: hidden;
+  color: #ffffff;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  outline: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  appearance: none;
+}
+
+.company-switcher__control select:focus {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.company-switcher__control option {
+  color: #101828;
+  background: #ffffff;
+}
+
+.company-switcher__meta {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+
+.company-switcher--collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-inline: 2px;
+  font-size: 20px;
+}
+
 .app-sidebar__nav {
   display: grid;
   gap: 8px;

@@ -18,7 +18,7 @@ export const fbrInvoiceRouter = Router();
 
 fbrInvoiceRouter.get("/", async (req, res, next) => {
   try {
-    res.json(await listInvoiceRecords(req.query));
+    res.json(await listInvoiceRecords(req.companyId!, req.query));
   } catch (error) {
     next(error);
   }
@@ -26,7 +26,7 @@ fbrInvoiceRouter.get("/", async (req, res, next) => {
 
 fbrInvoiceRouter.post("/format", async (req, res, next) => {
   try {
-    res.json({ data: await previewFormattedInvoice(invoiceBody(req.body), settingsBody(req.body)) });
+    res.json({ data: await previewFormattedInvoice(req.companyId!, invoiceBody(req.body), settingsBody(req.body)) });
   } catch (error) {
     next(error);
   }
@@ -34,7 +34,7 @@ fbrInvoiceRouter.post("/format", async (req, res, next) => {
 
 fbrInvoiceRouter.post("/validate", async (req, res, next) => {
   try {
-    res.json({ data: await validateInvoiceWithFbr(invoiceBody(req.body), settingsBody(req.body)) });
+    res.json({ data: await validateInvoiceWithFbr(req.companyId!, invoiceBody(req.body), settingsBody(req.body)) });
   } catch (error) {
     next(error);
   }
@@ -44,13 +44,13 @@ fbrInvoiceRouter.post("/submit", async (req, res, next) => {
   let invoice: FbrInvoiceInput | undefined;
   try {
     invoice = invoiceBody(req.body);
-    const result = await submitInvoiceToFbr(invoice, settingsBody(req.body));
-    const normalizedInvoice = await saveNormalizedInvoiceRecord(invoice, result);
+    const result = await submitInvoiceToFbr(req.companyId!, invoice, settingsBody(req.body));
+    const normalizedInvoice = await saveNormalizedInvoiceRecord(req.companyId!, invoice, result);
     res.json({ data: { ...result, normalizedInvoice, dashboardRecord: normalizedInvoice } });
   } catch (error) {
     if (invoice) {
       try {
-        await saveFailedInvoiceRecord(invoice, toError(error));
+        await saveFailedInvoiceRecord(req.companyId!, invoice, toError(error));
       } catch (saveError) {
         console.error("[invoice-save-failed]", saveError);
       }
@@ -62,7 +62,7 @@ fbrInvoiceRouter.post("/submit", async (req, res, next) => {
 fbrInvoiceRouter.get("/reference-lookup", async (req, res, next) => {
   try {
     res.json({
-      data: await lookupReferenceInvoice(req.query.invoiceRefNo, settingsFromQuery(req.query)),
+      data: await lookupReferenceInvoice(req.companyId!, req.query.invoiceRefNo, settingsFromQuery(req.query)),
     });
   } catch (error) {
     next(error);
@@ -71,7 +71,7 @@ fbrInvoiceRouter.get("/reference-lookup", async (req, res, next) => {
 
 fbrInvoiceRouter.get("/:id", async (req, res, next) => {
   try {
-    res.json({ data: await getInvoiceById(req.params.id) });
+    res.json({ data: await getInvoiceById(req.companyId!, req.params.id) });
   } catch (error) {
     next(error);
   }

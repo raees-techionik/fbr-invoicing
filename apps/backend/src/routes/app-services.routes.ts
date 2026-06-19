@@ -12,7 +12,7 @@ export const appServicesRouter = Router();
 appServicesRouter.get("/", async (req, res, next) => {
   try {
     res.json({
-      data: await listServices({
+      data: await listServices(req.companyId!, {
         search: typeof req.query.search === "string" ? req.query.search : undefined,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       }),
@@ -24,7 +24,7 @@ appServicesRouter.get("/", async (req, res, next) => {
 
 appServicesRouter.get("/:id", async (req, res, next) => {
   try {
-    res.json({ data: await getService(req.params.id) });
+    res.json({ data: await getService(req.companyId!, req.params.id) });
   } catch (error) {
     next(error);
   }
@@ -32,7 +32,7 @@ appServicesRouter.get("/:id", async (req, res, next) => {
 
 appServicesRouter.post("/", async (req, res, next) => {
   try {
-    res.status(201).json({ data: await createService(req.body) });
+    res.status(201).json({ data: await createService(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }
@@ -40,7 +40,7 @@ appServicesRouter.post("/", async (req, res, next) => {
 
 appServicesRouter.put("/:id", async (req, res, next) => {
   try {
-    res.json({ data: await updateService(req.params.id, req.body) });
+    res.json({ data: await updateService(req.companyId!, req.params.id, req.body) });
   } catch (error) {
     next(error);
   }
@@ -48,7 +48,7 @@ appServicesRouter.put("/:id", async (req, res, next) => {
 
 appServicesRouter.delete("/:id", async (req, res, next) => {
   try {
-    res.json({ data: await deleteService(req.params.id) });
+    res.json({ data: await deleteService(req.companyId!, req.params.id) });
   } catch (error) {
     next(error);
   }

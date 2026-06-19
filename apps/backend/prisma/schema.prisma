@@ -22,6 +22,66 @@ enum MembershipRole {
   VIEWER
 }
 
+enum CompanyInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum InvitationEmailStatus {
+  NOT_SENT
+  SENT
+  FAILED
+  DEV_LOGGED
+}
+
+enum FbrOnboardingStatus {
+  PROFILE_PENDING
+  PRODUCT_MAPPING_PENDING
+  IRIS_REGISTRATION_PENDING
+  IP_WHITELIST_PENDING
+  SANDBOX_TOKEN_PENDING
+  SANDBOX_TESTING
+  CLIENT_TESTING
+  PRODUCTION_TOKEN_PENDING
+  READY_FOR_LIVE
+  LIVE
+  SUSPENDED
+}
+
+enum FbrApprovalStatus {
+  NOT_STARTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum FbrTokenStatus {
+  MISSING
+  REQUESTED
+  CONFIGURED
+  INVALID
+  EXPIRED
+}
+
+enum FbrSandboxStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PASSED
+  FAILED
+}
+
+enum FbrSandboxResultStatus {
+  PASSED
+  FAILED
+}
+
+enum FbrSandboxOperation {
+  VALIDATE
+  SUBMIT
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -33,7 +93,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships UserCompanyMembership[]
+  memberships         UserCompanyMembership[]
+  sentInvitations     CompanyInvitation[]     @relation("InvitationInviter")
+  acceptedInvitations CompanyInvitation[]     @relation("InvitationAccepter")
+  companyActivityLogs CompanyActivityLog[]    @relation("CompanyActivityActor")
 }
 
 model Company {
@@ -45,7 +108,17 @@ model Company {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  memberships UserCompanyMembership[]
+  memberships    UserCompanyMembership[]
+  profile        CompanyProfile?
+  staffMembers   StaffMember[]
+  customers      Customer[]
+  invoices       Invoice[]
+  products       Product[]
+  tokens         Token[]
+  onboarding     FbrOnboarding?
+  sandboxResults SandboxResult[]
+  invitations    CompanyInvitation[]
+  activityLogs   CompanyActivityLog[]
 }
 
 model UserCompanyMembership {
@@ -63,8 +136,54 @@ model UserCompanyMembership {
   @@index([companyId])
 }
 
+model CompanyInvitation {
+  id               String                  @id @default(cuid())
+  companyId        String
+  email            String
+  role             MembershipRole          @default(MEMBER)
+  status           CompanyInvitationStatus @default(PENDING)
+  tokenHash        String                  @unique
+  invitedByUserId  String
+  acceptedByUserId String?
+  emailStatus      InvitationEmailStatus   @default(NOT_SENT)
+  emailSentAt      DateTime?
+  emailError       String?
+  emailAttemptedAt DateTime?
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime                @default(now())
+
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy  User    @relation("InvitationInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedBy User?   @relation("InvitationAccepter", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([companyId, email])
+  @@index([email, status])
+  @@index([expiresAt])
+}
+
+model CompanyActivityLog {
+  id          String   @id @default(cuid())
+  companyId   String
+  actorUserId String?
+  action      String
+  summary     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor   User?   @relation("CompanyActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, action])
+  @@index([actorUserId])
+}
+
 model CompanyProfile {
   id           String   @id @default(cuid())
+  companyId    String   @unique @default("legacy-default-company")
   companyName  String   @default("")
   ntnOrCnic    String   @default("")
   businessType String   @default("")
@@ -75,10 +194,13 @@ model CompanyProfile {
   logoBase64   String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
 
 model StaffMember {
   id          String   @id @default(cuid())
+  companyId   String   @default("legacy-default-company")
   memberName  String
   designation String
   cnicNtn     String
@@ -89,12 +211,16 @@ model StaffMember {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([memberName])
-  @@index([email])
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, memberName])
+  @@index([companyId, email])
 }
 
 model Customer {
   id               String   @id @default(cuid())
+  companyId        String   @default("legacy-default-company")
   name             String
   cnic             String
   phone            String
@@ -105,13 +231,16 @@ model Customer {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  @@index([name])
-  @@index([cnic])
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, name])
+  @@index([companyId, cnic])
 }
 
-
 model Invoice {
-  id                    String   @id @default(uuid())
+  id                    String    @id @default(uuid())
+  companyId             String    @default("legacy-default-company")
   fbrInvoiceNumber      String?
   invoiceType           String
   invoiceDate           DateTime
@@ -125,22 +254,24 @@ model Invoice {
   buyerProvince         String
   buyerAddress          String
   buyerRegistrationType String
-  status                String   @default("DRAFT")
-  isOffline             Boolean  @default(false)
+  status                String    @default("DRAFT")
+  isOffline             Boolean   @default(false)
   offlineQueuedAt       DateTime?
   submittedAt           DateTime?
   fbrRawResponse        Json?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   items        InvoiceItem[]
   offlineQueue OfflineQueue[]
 
-  @@index([fbrInvoiceNumber])
-  @@index([invoiceDate])
-  @@index([invoiceType])
-  @@index([status])
-  @@index([isOffline])
+  @@index([companyId])
+  @@index([companyId, fbrInvoiceNumber])
+  @@index([companyId, invoiceDate])
+  @@index([companyId, invoiceType])
+  @@index([companyId, status])
+  @@index([companyId, isOffline])
 }
 
 model InvoiceItem {
@@ -176,6 +307,7 @@ model InvoiceItem {
 
 model Product {
   id                   String   @id @default(uuid())
+  companyId            String   @default("legacy-default-company")
   name                 String
   hsCode               String
   hsDescription        String
@@ -191,21 +323,27 @@ model Product {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  @@index([name])
-  @@index([hsCode])
-  @@index([isActive])
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, name])
+  @@index([companyId, hsCode])
+  @@index([companyId, isActive])
 }
 
 model Token {
   id          String   @id @default(uuid())
+  companyId   String   @default("legacy-default-company")
   environment String
   token       String
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([environment])
-  @@index([isActive])
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, environment, isActive])
 }
 
 model OfflineQueue {
@@ -240,3 +378,55 @@ model ReferenceCache {
   @@index([expiresAt])
 }
 
+model FbrOnboarding {
+  id                     String              @id @default(cuid())
+  companyId              String              @unique @default("legacy-default-company")
+  status                 FbrOnboardingStatus @default(PROFILE_PENDING)
+  businessNature         String?
+  primarySector          String?
+  technicalContactName   String?
+  technicalContactMobile String?
+  technicalContactEmail  String?
+  erpProvider            String              @default("Techionik")
+  softwareType           String              @default("Cloud")
+  ipWhitelistStatus      FbrApprovalStatus   @default(NOT_STARTED)
+  sandboxTokenStatus     FbrTokenStatus      @default(MISSING)
+  sandboxStatus          FbrSandboxStatus    @default(NOT_STARTED)
+  productionTokenStatus  FbrTokenStatus      @default(MISSING)
+  irisSubmittedAt        DateTime?
+  ipWhitelistApprovedAt  DateTime?
+  sandboxStartedAt       DateTime?
+  sandboxCompletedAt     DateTime?
+  productionRequestedAt  DateTime?
+  goLiveAt               DateTime?
+  notes                  String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model SandboxResult {
+  id            String                 @id @default(cuid())
+  companyId     String                 @default("legacy-default-company")
+  scenarioId    String
+  scenarioName  String?
+  operation     FbrSandboxOperation
+  status        FbrSandboxResultStatus
+  statusCode    String?
+  invoiceNumber String?
+  payload       Json
+  response      Json?
+  errors        Json?
+  durationMs    Int?
+  runAt         DateTime               @default(now())
+  passedAt      DateTime?
+  createdAt     DateTime               @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, scenarioId])
+  @@index([companyId, status])
+  @@index([companyId, runAt])
+}

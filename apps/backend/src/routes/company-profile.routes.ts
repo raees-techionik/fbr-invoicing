@@ -3,9 +3,9 @@ import { getCompanyProfile, updateCompanyProfile } from "../services/company-pro
 
 export const companyProfileRouter = Router();
 
-companyProfileRouter.get("/", async (_req, res, next) => {
+companyProfileRouter.get("/", async (req, res, next) => {
   try {
-    res.json({ data: await getCompanyProfile() });
+    res.json({ data: await getCompanyProfile(req.companyId!) });
   } catch (error) {
     next(error);
   }
@@ -13,7 +13,7 @@ companyProfileRouter.get("/", async (_req, res, next) => {
 
 companyProfileRouter.put("/", async (req, res, next) => {
   try {
-    res.json({ data: await updateCompanyProfile(req.body) });
+    res.json({ data: await updateCompanyProfile(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }

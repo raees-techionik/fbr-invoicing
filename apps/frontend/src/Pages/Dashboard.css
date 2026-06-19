@@ -36,6 +36,16 @@
   gap: 14px;
 }
 
+.fbr-menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.fbr-account-wrap {
+  gap: 2px;
+}
+
 .fbr-date-filter,
 .fbr-search,
 .fbr-bell,
@@ -114,6 +124,21 @@
   font-size: 22px;
 }
 
+.fbr-date-filter:hover,
+.fbr-bell:hover,
+.fbr-avatar:hover,
+.fbr-plain-icon:hover {
+  background: #f8fafc;
+}
+
+.fbr-date-filter[aria-expanded="true"],
+.fbr-bell[aria-expanded="true"],
+.fbr-avatar[aria-expanded="true"],
+.fbr-plain-icon[aria-expanded="true"] {
+  border-color: #9fb2c7;
+  background: #f8fafc;
+}
+
 .fbr-bell span {
   position: absolute;
   top: 2px;
@@ -143,6 +168,116 @@
   border-radius: 999px;
   font-size: 14px;
   font-weight: 700;
+}
+
+.fbr-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 80;
+  display: grid;
+  min-width: 260px;
+  overflow: hidden;
+  color: #101828;
+  background: #ffffff;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(16, 24, 40, 0.18);
+}
+
+.fbr-date-menu {
+  left: 0;
+  right: auto;
+  width: 292px;
+}
+
+.fbr-notification-menu {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.fbr-account-menu {
+  width: min(260px, calc(100vw - 32px));
+}
+
+.fbr-dropdown__header {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.fbr-dropdown__header strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.fbr-dropdown__header span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.fbr-dropdown button,
+.fbr-dropdown a {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 16px;
+  color: #101828;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #f1f4f7;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.fbr-dropdown button:last-child,
+.fbr-dropdown a:last-child {
+  border-bottom: 0;
+}
+
+.fbr-dropdown button:hover,
+.fbr-dropdown a:hover,
+.fbr-dropdown button.active {
+  color: #087a3d;
+  background: #f3faf6;
+}
+
+.fbr-dropdown button.danger {
+  color: #b42318;
+}
+
+.fbr-dropdown button.danger:hover {
+  color: #912018;
+  background: #fff4f3;
+}
+
+.fbr-dropdown button strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.fbr-dropdown button span {
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.fbr-dropdown button small {
+  color: #667085;
+  font-size: 11px;
+}
+
+.fbr-date-menu button {
+  grid-template-columns: 1fr;
+}
+
+.fbr-date-menu button[aria-checked="true"] {
+  color: #087a3d;
+  background: #f3faf6;
 }
 
 .fbr-dashboard__body {

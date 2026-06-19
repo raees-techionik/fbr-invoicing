@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import axios from 'axios'
+import { applyAuthContext } from '../../services/companySession'
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000'
 
@@ -10,7 +11,7 @@ export const fetchProducts = createAsyncThunk(
   'data/fetchProducts',
   async (_, { rejectWithValue }) => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/products`)
+      const res = await axios.get(`${API_BASE_URL}/api/products`, applyAuthContext({ headers: {} }))
       return res.data.data
     } catch (err) {
       return rejectWithValue('Failed to fetch products')
@@ -25,12 +26,7 @@ export const fetchInvoices = createAsyncThunk(
   'data/fetchInvoices',
   async (_, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('token')
-      const res = await axios.get(`${API_BASE_URL}/api/invoices`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
+      const res = await axios.get(`${API_BASE_URL}/api/invoices`, applyAuthContext({ headers: {} }))
       return res.data.data || []
     } catch (err) {
       return rejectWithValue('Failed to fetch invoices')

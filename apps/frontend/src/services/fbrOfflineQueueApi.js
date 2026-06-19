@@ -1,14 +1,11 @@
 import axios from 'axios';
+import { applyAuthContext } from './companySession';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 const queueApi = axios.create({ baseURL: `${API_BASE_URL}/api/queue` });
 
-queueApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+queueApi.interceptors.request.use(applyAuthContext);
 
 export async function getOfflineQueue(params = {}) {
   const resp = await queueApi.get('/', { params });

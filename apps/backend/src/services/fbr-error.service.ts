@@ -31,6 +31,7 @@ interface NormalizeErrorInput {
 }
 
 interface AuditInput {
+  companyId: string;
   operation: string;
   endpoint?: string;
   statusCode?: string;
@@ -217,6 +218,7 @@ export async function logFbrErrorAudit(input: AuditInput): Promise<void> {
 
   const auditFile = process.env.FBR_ERROR_AUDIT_LOG_PATH ?? join(process.cwd(), ".data", "fbr-error-audit.log");
   const row = {
+    companyId: input.companyId,
     timestamp: new Date().toISOString(),
     operation: input.operation,
     endpoint: input.endpoint,

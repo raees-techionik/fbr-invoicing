@@ -14,7 +14,7 @@ export const fbrDashboardRouter = Router();
 
 fbrDashboardRouter.get("/summary", async (req, res, next) => {
   try {
-    res.json({ data: await getInvoiceSummary(req.query) });
+    res.json({ data: await getInvoiceSummary(req.companyId!, req.query) });
   } catch (error) {
     next(error);
   }
@@ -22,7 +22,7 @@ fbrDashboardRouter.get("/summary", async (req, res, next) => {
 
 fbrDashboardRouter.get("/invoices", async (req, res, next) => {
   try {
-    res.json(await listInvoiceRecords(req.query));
+    res.json(await listInvoiceRecords(req.companyId!, req.query));
   } catch (error) {
     next(error);
   }
@@ -30,7 +30,7 @@ fbrDashboardRouter.get("/invoices", async (req, res, next) => {
 
 fbrDashboardRouter.get("/invoices/:id", async (req, res, next) => {
   try {
-    res.json({ data: await getInvoiceRecord(req.params.id) });
+    res.json({ data: await getInvoiceRecord(req.companyId!, req.params.id) });
   } catch (error) {
     next(error);
   }
@@ -38,7 +38,7 @@ fbrDashboardRouter.get("/invoices/:id", async (req, res, next) => {
 
 fbrDashboardRouter.post("/invoices", async (req, res, next) => {
   try {
-    res.status(201).json({ data: await createInvoiceRecord(req.body) });
+    res.status(201).json({ data: await createInvoiceRecord(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }
@@ -46,7 +46,7 @@ fbrDashboardRouter.post("/invoices", async (req, res, next) => {
 
 fbrDashboardRouter.delete("/invoices/:id", async (req, res, next) => {
   try {
-    await deleteInvoiceRecord(req.params.id);
+    await deleteInvoiceRecord(req.companyId!, req.params.id);
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -55,7 +55,7 @@ fbrDashboardRouter.delete("/invoices/:id", async (req, res, next) => {
 
 fbrDashboardRouter.patch("/invoices/:id/claimed", async (req, res, next) => {
   try {
-    res.json({ data: await updateInvoiceClaimStatus(req.params.id, req.body?.claimed) });
+    res.json({ data: await updateInvoiceClaimStatus(req.companyId!, req.params.id, req.body?.claimed) });
   } catch (error) {
     next(error);
   }
@@ -63,15 +63,15 @@ fbrDashboardRouter.patch("/invoices/:id/claimed", async (req, res, next) => {
 
 fbrDashboardRouter.get("/charts", async (req, res, next) => {
   try {
-    res.json({ data: await getInvoiceChartData(req.query) });
+    res.json({ data: await getInvoiceChartData(req.companyId!, req.query) });
   } catch (error) {
     next(error);
   }
 });
 
-fbrDashboardRouter.post("/seed-mock", async (_req, res, next) => {
+fbrDashboardRouter.post("/seed-mock", async (req, res, next) => {
   try {
-    res.json({ data: await seedMockInvoiceRecords() });
+    res.json({ data: await seedMockInvoiceRecords(req.companyId!) });
   } catch (error) {
     next(error);
   }

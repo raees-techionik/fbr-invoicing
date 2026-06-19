@@ -26,6 +26,9 @@ import OfflineBanner from './Components/OfflineBanner';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { getOfflineQueueSummary, processOfflineQueue } from './services/fbrOfflineQueueApi';
 import './AppShell.css';
+import OnboardingWorkspace from './Pages/OnboardingWorkspace';
+import InvitationAcceptance from './Pages/InvitationAcceptance';
+import { CompanyProvider } from './contexts/CompanyContext';
 
 const SIDEBAR_OVERLAY_BREAKPOINT = 900;
 
@@ -163,6 +166,8 @@ function MainContent() {
         <Route path="/products" element={<ProtectedPage component={Products} />} />
         <Route path="/staff" element={<ProtectedPage component={Staff} />} />
         <Route path="/sandbox" element={<ProtectedPage component={Sandbox} />} />
+        <Route path="/onboarding" element={<ProtectedPage component={OnboardingWorkspace} />} />
+        <Route path="/company-invitation/:token" element={<ProtectedPage component={InvitationAcceptance} />} />
         <Route path="/support" element={<ProtectedPage component={Support} />} />
         <Route path="/settings" element={<ProtectedPage component={Settings} />} />
         <Route path="/account/*" element={<ProtectedRoute><AccApp /></ProtectedRoute>} />
@@ -263,7 +268,7 @@ function App() {
           <span className="visually-hidden">Loading...</span>
         </div>
       ) : (
-        <MainContent />
+        <CompanyProvider><MainContent /></CompanyProvider>
       )}
     </Router>
   );

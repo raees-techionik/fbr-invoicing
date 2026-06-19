@@ -4,6 +4,7 @@ import express from "express";
 import swaggerUi from "swagger-ui-express";
 import { authRouter } from "./routes/auth.routes.js";
 import { companyProfileRouter } from "./routes/company-profile.routes.js";
+import { companiesRouter } from "./routes/companies.routes.js";
 import { customersRouter } from "./routes/customers.routes.js";
 import { appServicesRouter } from "./routes/app-services.routes.js";
 import { staffRouter } from "./routes/staff.routes.js";
@@ -43,6 +44,7 @@ app.get("/api-docs.json", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/companies", requireAuth, companiesRouter);
 app.use("/api/company-profile", requireAuth, companyProfileRouter);
 app.use("/api/customers", requireAuth, customersRouter);
 app.use("/api/services", requireAuth, appServicesRouter);

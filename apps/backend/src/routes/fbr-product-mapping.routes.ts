@@ -17,7 +17,7 @@ export const fbrProductMappingRouter = Router();
 fbrProductMappingRouter.get("/", async (req, res, next) => {
   try {
     res.json({
-      data: await listProductMappings({
+      data: await listProductMappings(req.companyId!, {
         search: queryString(req, "search"),
         status: queryString(req, "status"),
         limit: numberQuery(req, "limit"),
@@ -30,7 +30,7 @@ fbrProductMappingRouter.get("/", async (req, res, next) => {
 
 fbrProductMappingRouter.get("/hs-search", async (req, res, next) => {
   try {
-    res.json(await searchHsCodeSuggestions(queryString(req, "query") ?? "", numberQuery(req, "limit") ?? 20));
+    res.json(await searchHsCodeSuggestions(req.companyId!, queryString(req, "query") ?? "", numberQuery(req, "limit") ?? 20));
   } catch (error) {
     next(error);
   }
@@ -39,7 +39,7 @@ fbrProductMappingRouter.get("/hs-search", async (req, res, next) => {
 fbrProductMappingRouter.get("/resolve", async (req, res, next) => {
   try {
     res.json({
-      data: await resolveHsInvoiceFields({
+      data: await resolveHsInvoiceFields(req.companyId!, {
         hsCode: requiredQuery(req, "hsCode"),
         saleType: queryString(req, "saleType"),
         invoiceDate: queryString(req, "invoiceDate"),
@@ -54,7 +54,7 @@ fbrProductMappingRouter.get("/resolve", async (req, res, next) => {
 
 fbrProductMappingRouter.get("/:id/autofill", async (req, res, next) => {
   try {
-    res.json({ data: await getProductAutofill(req.params.id) });
+    res.json({ data: await getProductAutofill(req.companyId!, req.params.id) });
   } catch (error) {
     next(error);
   }
@@ -62,7 +62,7 @@ fbrProductMappingRouter.get("/:id/autofill", async (req, res, next) => {
 
 fbrProductMappingRouter.get("/:id", async (req, res, next) => {
   try {
-    res.json({ data: await getProductMapping(req.params.id) });
+    res.json({ data: await getProductMapping(req.companyId!, req.params.id) });
   } catch (error) {
     next(error);
   }
@@ -75,7 +75,7 @@ fbrProductMappingRouter.post("/bulk-import", async (req, res, next) => {
       res.status(400).json({ error: "Request body must be a non-empty array of products, or { products: [...] }" });
       return;
     }
-    res.json({ data: await bulkImportProductMappings(rows) });
+    res.json({ data: await bulkImportProductMappings(req.companyId!, rows) });
   } catch (error) {
     next(error);
   }
@@ -83,7 +83,7 @@ fbrProductMappingRouter.post("/bulk-import", async (req, res, next) => {
 
 fbrProductMappingRouter.post("/", async (req, res, next) => {
   try {
-    res.status(201).json({ data: await createProductMapping(req.body) });
+    res.status(201).json({ data: await createProductMapping(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }
@@ -91,7 +91,7 @@ fbrProductMappingRouter.post("/", async (req, res, next) => {
 
 fbrProductMappingRouter.put("/:id", async (req, res, next) => {
   try {
-    res.json({ data: await updateProductMapping(req.params.id, req.body) });
+    res.json({ data: await updateProductMapping(req.companyId!, req.params.id, req.body) });
   } catch (error) {
     next(error);
   }
@@ -99,7 +99,7 @@ fbrProductMappingRouter.put("/:id", async (req, res, next) => {
 
 fbrProductMappingRouter.delete("/:id", async (req, res, next) => {
   try {
-    res.json({ data: await deleteProductMapping(req.params.id) });
+    res.json({ data: await deleteProductMapping(req.companyId!, req.params.id) });
   } catch (error) {
     next(error);
   }

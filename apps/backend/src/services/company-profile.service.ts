@@ -3,21 +3,29 @@ import { devIsoNow, withDevDbFallback } from "./dev-db-fallback.js";
 
 // Singleton profile — upsert against a fixed well-known ID so there is
 // always exactly one row regardless of how many times PUT is called.
-const PROFILE_ID = "singleton";
+const devCompanyProfiles = new Map<string, ReturnType<typeof makeDevCompanyProfile>>();
 
-let devCompanyProfile = {
-  id: PROFILE_ID,
-  company_name: process.env.DEV_COMPANY_NAME || "Techionik (Pvt) Ltd.",
-  ntn_or_cnic: process.env.DEV_COMPANY_NTN || "1234567890123",
-  business_type: process.env.DEV_COMPANY_BUSINESS_TYPE || "Digital Invoicing",
-  province: process.env.DEV_COMPANY_PROVINCE || "PUNJAB",
-  address: process.env.DEV_COMPANY_ADDRESS || "Techionik Office, Lahore",
-  phone_number: process.env.DEV_COMPANY_PHONE || "+92-300-0000000",
-  email_address: process.env.DEV_COMPANY_EMAIL || "admin@fbr.com",
-  logo_base64: null as string | null,
-  created_at: devIsoNow(),
-  updated_at: devIsoNow(),
-};
+function makeDevCompanyProfile(companyId: string) {
+  return {
+    id: `dev-profile-${companyId}`,
+    company_name: process.env.DEV_COMPANY_NAME || "Techionik (Pvt) Ltd.",
+    ntn_or_cnic: process.env.DEV_COMPANY_NTN || "1234567890123",
+    business_type: process.env.DEV_COMPANY_BUSINESS_TYPE || "Digital Invoicing",
+    province: process.env.DEV_COMPANY_PROVINCE || "PUNJAB",
+    address: process.env.DEV_COMPANY_ADDRESS || "Techionik Office, Lahore",
+    phone_number: process.env.DEV_COMPANY_PHONE || "+92-300-0000000",
+    email_address: process.env.DEV_COMPANY_EMAIL || "admin@fbr.com",
+    logo_base64: null as string | null,
+    created_at: devIsoNow(),
+    updated_at: devIsoNow(),
+  };
+}
+
+function devCompanyProfile(companyId: string) {
+  const profile = devCompanyProfiles.get(companyId) ?? makeDevCompanyProfile(companyId);
+  devCompanyProfiles.set(companyId, profile);
+  return profile;
+}
 
 function toDto(record: {
   id: string;
@@ -47,24 +55,24 @@ function toDto(record: {
   };
 }
 
-export async function getCompanyProfile() {
+export async function getCompanyProfile(companyId: string) {
   const record = await withDevDbFallback(
     "companyProfile.findUnique",
-    prisma.companyProfile.findUnique({ where: { id: PROFILE_ID } }),
+    prisma.companyProfile.findUnique({ where: { companyId } }),
     () => null,
   );
   if (!record) {
-    return devCompanyProfile;
+    return devCompanyProfile(companyId);
   }
   return toDto(record);
 }
 
-export async function updateCompanyProfile(body: Record<string, unknown>) {
+export async function updateCompanyProfile(companyId: string, body: Record<string, unknown>) {
   const str = (v: unknown, fallback = "") => (v !== undefined && v !== null ? String(v) : fallback);
 
   const existing = await withDevDbFallback(
     "companyProfile.findUniqueForUpdate",
-    prisma.companyProfile.findUnique({ where: { id: PROFILE_ID } }),
+    prisma.companyProfile.findUnique({ where: { companyId } }),
     () => null,
   );
 
@@ -84,8 +92,8 @@ export async function updateCompanyProfile(body: Record<string, unknown>) {
   const record = await withDevDbFallback(
     "companyProfile.upsert",
     prisma.companyProfile.upsert({
-      where: { id: PROFILE_ID },
-      create: { id: PROFILE_ID, ...data },
+      where: { companyId },
+      create: { companyId, ...data },
       update: data,
     }),
     () => null,
@@ -93,8 +101,8 @@ export async function updateCompanyProfile(body: Record<string, unknown>) {
 
   if (!record) {
     const now = devIsoNow();
-    devCompanyProfile = {
-      ...devCompanyProfile,
+    const updated = {
+      ...devCompanyProfile(companyId),
       company_name: data.companyName,
       ntn_or_cnic: data.ntnOrCnic,
       business_type: data.businessType,
@@ -105,7 +113,8 @@ export async function updateCompanyProfile(body: Record<string, unknown>) {
       logo_base64: data.logoBase64,
       updated_at: now,
     };
-    return devCompanyProfile;
+    devCompanyProfiles.set(companyId, updated);
+    return updated;
   }
 
   return toDto(record);

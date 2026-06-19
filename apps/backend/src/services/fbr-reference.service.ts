@@ -3,6 +3,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import type { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
+import { getRuntimeFbrSettings } from "./fbr-settings.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -232,37 +233,38 @@ const endpoints: Record<ReferenceKey, EndpointDefinition> = {
   },
 };
 
-export async function getProvinces(forceRefresh = false): Promise<ReferenceResult> {
-  return getReferenceData("provinces", {}, forceRefresh);
+export async function getProvinces(companyId: string, forceRefresh = false): Promise<ReferenceResult> {
+  return getReferenceData(companyId, "provinces", {}, forceRefresh);
 }
 
-export async function getDocumentTypes(forceRefresh = false): Promise<ReferenceResult> {
-  return getReferenceData("documentTypes", {}, forceRefresh);
+export async function getDocumentTypes(companyId: string, forceRefresh = false): Promise<ReferenceResult> {
+  return getReferenceData(companyId, "documentTypes", {}, forceRefresh);
 }
 
-export async function getItemDescriptions(forceRefresh = false): Promise<ReferenceResult> {
-  return getReferenceData("itemDescriptions", {}, forceRefresh);
+export async function getItemDescriptions(companyId: string, forceRefresh = false): Promise<ReferenceResult> {
+  return getReferenceData(companyId, "itemDescriptions", {}, forceRefresh);
 }
 
-export async function getUoms(forceRefresh = false): Promise<ReferenceResult> {
-  return getReferenceData("uoms", {}, forceRefresh);
+export async function getUoms(companyId: string, forceRefresh = false): Promise<ReferenceResult> {
+  return getReferenceData(companyId, "uoms", {}, forceRefresh);
 }
 
-export async function getSroItemCodes(forceRefresh = false): Promise<ReferenceResult> {
-  return getReferenceData("sroItemCodes", {}, forceRefresh);
+export async function getSroItemCodes(companyId: string, forceRefresh = false): Promise<ReferenceResult> {
+  return getReferenceData(companyId, "sroItemCodes", {}, forceRefresh);
 }
 
-export async function getTransactionTypes(forceRefresh = false): Promise<ReferenceResult> {
-  return getReferenceData("transactionTypes", {}, forceRefresh);
+export async function getTransactionTypes(companyId: string, forceRefresh = false): Promise<ReferenceResult> {
+  return getReferenceData(companyId, "transactionTypes", {}, forceRefresh);
 }
 
-export async function getSroSchedules(params: {
+export async function getSroSchedules(companyId: string, params: {
   rateId: string;
   date: string;
   originationSupplier: string;
   forceRefresh?: boolean;
 }): Promise<ReferenceResult> {
   return getReferenceData(
+    companyId,
     "sroSchedules",
     {
       rate_id: params.rateId,
@@ -273,13 +275,14 @@ export async function getSroSchedules(params: {
   );
 }
 
-export async function getSaleTypeRates(params: {
+export async function getSaleTypeRates(companyId: string, params: {
   transTypeId: string;
   date: string;
   originationSupplier: string;
   forceRefresh?: boolean;
 }): Promise<ReferenceResult> {
   return getReferenceData(
+    companyId,
     "saleTypeRates",
     {
       transTypeId: params.transTypeId,
@@ -290,12 +293,13 @@ export async function getSaleTypeRates(params: {
   );
 }
 
-export async function getHsUoms(params: {
+export async function getHsUoms(companyId: string, params: {
   hsCode: string;
   annexureId: string;
   forceRefresh?: boolean;
 }): Promise<ReferenceResult> {
   return getReferenceData(
+    companyId,
     "hsUoms",
     {
       hs_code: params.hsCode,
@@ -305,12 +309,13 @@ export async function getHsUoms(params: {
   );
 }
 
-export async function getSroItems(params: {
+export async function getSroItems(companyId: string, params: {
   date: string;
   sroId: string;
   forceRefresh?: boolean;
 }): Promise<ReferenceResult> {
   return getReferenceData(
+    companyId,
     "sroItems",
     {
       date: params.date,
@@ -320,26 +325,27 @@ export async function getSroItems(params: {
   );
 }
 
-export async function getStatl(params: {
+export async function getStatl(companyId: string, params: {
   regno: string;
   date: string;
   forceRefresh?: boolean;
 }): Promise<ReferenceResult> {
-  return getReferenceData("statl", { regno: params.regno, date: params.date }, params.forceRefresh);
+  return getReferenceData(companyId, "statl", { regno: params.regno, date: params.date }, params.forceRefresh);
 }
 
-export async function getRegistrationType(params: {
+export async function getRegistrationType(companyId: string, params: {
   registrationNo: string;
   forceRefresh?: boolean;
 }): Promise<ReferenceResult> {
   return getReferenceData(
+    companyId,
     "registrationType",
     { Registration_No: params.registrationNo },
     params.forceRefresh,
   );
 }
 
-export async function getReferenceBootstrap(forceRefresh = false): Promise<Record<string, ReferenceResult>> {
+export async function getReferenceBootstrap(companyId: string, forceRefresh = false): Promise<Record<string, ReferenceResult>> {
   const [
     provinces,
     documentTypes,
@@ -348,12 +354,12 @@ export async function getReferenceBootstrap(forceRefresh = false): Promise<Recor
     sroItemCodes,
     transactionTypes,
   ] = await Promise.all([
-    getProvinces(forceRefresh),
-    getDocumentTypes(forceRefresh),
-    getItemDescriptions(forceRefresh),
-    getUoms(forceRefresh),
-    getSroItemCodes(forceRefresh),
-    getTransactionTypes(forceRefresh),
+    getProvinces(companyId, forceRefresh),
+    getDocumentTypes(companyId, forceRefresh),
+    getItemDescriptions(companyId, forceRefresh),
+    getUoms(companyId, forceRefresh),
+    getSroItemCodes(companyId, forceRefresh),
+    getTransactionTypes(companyId, forceRefresh),
   ]);
 
   return {
@@ -367,6 +373,7 @@ export async function getReferenceBootstrap(forceRefresh = false): Promise<Recor
 }
 
 async function getReferenceData(
+  companyId: string,
   key: ReferenceKey,
   params: CacheableParams,
   forceRefresh = false,
@@ -381,7 +388,7 @@ async function getReferenceData(
   }
 
   const definition = endpoints[key];
-  const raw = USE_MOCKS ? cloneMockPayload(definition.mockKey) : await fetchFromFbr(definition.path, params);
+  const raw = USE_MOCKS ? cloneMockPayload(definition.mockKey) : await fetchFromFbr(companyId, definition.path, params);
   const normalized = normalizeResponse(raw, definition);
 
   const result: ReferenceResult = {
@@ -434,7 +441,7 @@ async function writeCachedReference(cacheKey: string, result: ReferenceResult): 
   });
 }
 
-async function fetchFromFbr(path: string, params: CacheableParams): Promise<unknown> {
+async function fetchFromFbr(companyId: string, path: string, params: CacheableParams): Promise<unknown> {
   const url = new URL(path, FBR_BASE_URL);
 
   for (const [key, value] of Object.entries(params)) {
@@ -443,11 +450,13 @@ async function fetchFromFbr(path: string, params: CacheableParams): Promise<unkn
     }
   }
 
+  const runtimeSettings = await getRuntimeFbrSettings(companyId);
+  const token = runtimeSettings.activeToken || FBR_REFERENCE_TOKEN;
   const response = await fetch(url, {
     method: "GET",
     headers: {
       Accept: "application/json",
-      ...(FBR_REFERENCE_TOKEN ? { Authorization: `Bearer ${FBR_REFERENCE_TOKEN}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
 

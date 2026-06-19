@@ -31,10 +31,11 @@ interface CreateInvoiceRecordInput {
 
 type InvoiceWithItems = Prisma.InvoiceGetPayload<{ include: { items: true } }>;
 
-export async function createInvoiceRecord(raw: CreateInvoiceRecordInput) {
+export async function createInvoiceRecord(companyId: string, raw: CreateInvoiceRecordInput) {
   const normalized = normalizeCreateInput(raw);
   const created = await prisma.invoice.create({
     data: {
+      companyId,
       fbrInvoiceNumber: normalized.fbrInvoiceNumber,
       invoiceType: normalized.invoiceType,
       invoiceDate: normalized.invoiceDate,
@@ -65,10 +66,10 @@ export async function createInvoiceRecord(raw: CreateInvoiceRecordInput) {
   return toDashboardInvoiceDto(created);
 }
 
-export async function listInvoiceRecords(filters: InvoiceDashboardFilters = {}) {
+export async function listInvoiceRecords(companyId: string, filters: InvoiceDashboardFilters = {}) {
   const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 250);
   const offset = Math.max(Number(filters.offset) || 0, 0);
-  const where = prismaWhere(filters);
+  const where = prismaWhere(companyId, filters);
   const [total, records] = await Promise.all([
     prisma.invoice.count({ where }),
     prisma.invoice.findMany({
@@ -92,9 +93,9 @@ export async function listInvoiceRecords(filters: InvoiceDashboardFilters = {}) 
   };
 }
 
-export async function getInvoiceRecord(id: string) {
-  const record = await prisma.invoice.findUnique({
-    where: { id },
+export async function getInvoiceRecord(companyId: string, id: string) {
+  const record = await prisma.invoice.findFirst({
+    where: { id, companyId },
     include: {
       items: true,
     },
@@ -107,8 +108,8 @@ export async function getInvoiceRecord(id: string) {
   return toDashboardInvoiceDto(record, true);
 }
 
-export async function getInvoiceSummary(filters: InvoiceDashboardFilters = {}) {
-  const records = await getFilteredRecords(filters);
+export async function getInvoiceSummary(companyId: string, filters: InvoiceDashboardFilters = {}) {
+  const records = await getFilteredRecords(companyId, filters);
   const saleInvoices = records.filter((record) => normalizeInvoiceType(record.invoiceType) === "sale").length;
   const debitNotes = records.filter((record) => normalizeInvoiceType(record.invoiceType) === "debit").length;
   const totalAmountPkr = records.reduce((sum, record) => sum + calculateInvoiceAmount(record), 0);
@@ -127,9 +128,9 @@ export async function getInvoiceSummary(filters: InvoiceDashboardFilters = {}) {
   };
 }
 
-export async function getInvoiceChartData(filters: InvoiceDashboardFilters & { period?: string } = {}) {
+export async function getInvoiceChartData(companyId: string, filters: InvoiceDashboardFilters & { period?: string } = {}) {
   const period = parsePeriod(filters.period);
-  const records = await getFilteredRecords(filters);
+  const records = await getFilteredRecords(companyId, filters);
   const buckets = new Map<string, { invoiceCount: number; totalAmountPkr: number }>();
 
   for (const record of records) {
@@ -152,17 +153,17 @@ export async function getInvoiceChartData(filters: InvoiceDashboardFilters & { p
   };
 }
 
-export async function deleteInvoiceRecord(id: string): Promise<void> {
+export async function deleteInvoiceRecord(companyId: string, id: string): Promise<void> {
   try {
-    await prisma.invoice.delete({ where: { id } });
+    await prisma.invoice.delete({ where: { id, companyId } });
   } catch {
     throw httpError(404, "Invoice not found.");
   }
 }
 
-export async function updateInvoiceClaimStatus(id: string, claimed: unknown) {
-  const existing = await prisma.invoice.findUnique({
-    where: { id },
+export async function updateInvoiceClaimStatus(companyId: string, id: string, claimed: unknown) {
+  const existing = await prisma.invoice.findFirst({
+    where: { id, companyId },
     include: {
       items: true,
     },
@@ -174,7 +175,7 @@ export async function updateInvoiceClaimStatus(id: string, claimed: unknown) {
 
   const raw = objectValue(existing.fbrRawResponse);
   const updated = await prisma.invoice.update({
-    where: { id },
+    where: { id, companyId },
     data: {
       fbrRawResponse: {
         ...raw,
@@ -189,8 +190,8 @@ export async function updateInvoiceClaimStatus(id: string, claimed: unknown) {
   return toDashboardInvoiceDto(updated);
 }
 
-export async function seedMockInvoiceRecords() {
-  const existing = await listInvoiceRecords({ limit: 1 });
+export async function seedMockInvoiceRecords(companyId: string) {
+  const existing = await listInvoiceRecords(companyId, { limit: 1 });
 
   if (existing.pagination.total > 0) {
     return {
@@ -209,7 +210,7 @@ export async function seedMockInvoiceRecords() {
   ];
 
   for (const sample of samples) {
-    await createInvoiceRecord(sample);
+    await createInvoiceRecord(companyId, sample);
   }
 
   return {
@@ -238,9 +239,9 @@ function normalizeCreateInput(raw: CreateInvoiceRecordInput) {
   };
 }
 
-async function getFilteredRecords(filters: InvoiceDashboardFilters): Promise<InvoiceWithItems[]> {
+async function getFilteredRecords(companyId: string, filters: InvoiceDashboardFilters): Promise<InvoiceWithItems[]> {
   return prisma.invoice.findMany({
-    where: prismaWhere(filters),
+    where: prismaWhere(companyId, filters),
     include: {
       items: true,
     },
@@ -248,7 +249,7 @@ async function getFilteredRecords(filters: InvoiceDashboardFilters): Promise<Inv
   });
 }
 
-function prismaWhere(filters: InvoiceDashboardFilters): Prisma.InvoiceWhereInput {
+function prismaWhere(companyId: string, filters: InvoiceDashboardFilters): Prisma.InvoiceWhereInput {
   const search = stringValue(filters.search);
   const dateFrom = parseDate(filters.dateFrom);
   const dateTo = parseEndDate(filters.dateTo);
@@ -257,6 +258,7 @@ function prismaWhere(filters: InvoiceDashboardFilters): Prisma.InvoiceWhereInput
   const claimed = parseOptionalBoolean(filters.claimed);
 
   return {
+    companyId,
     ...(invoiceType ? { invoiceType } : {}),
     ...(status ? { status } : {}),
     ...(dateFrom || dateTo

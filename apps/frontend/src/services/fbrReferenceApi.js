@@ -1,4 +1,5 @@
 import axios from "axios";
+import { applyAuthContext } from "./companySession";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:3000";
 
@@ -6,11 +7,7 @@ const referenceApi = axios.create({
   baseURL: `${API_BASE_URL}/api/ref`,
 });
 
-referenceApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+referenceApi.interceptors.request.use(applyAuthContext);
 
 export async function getFbrReferenceBootstrap({ forceRefresh = false } = {}) {
   const response = await referenceApi.get("/bootstrap", {

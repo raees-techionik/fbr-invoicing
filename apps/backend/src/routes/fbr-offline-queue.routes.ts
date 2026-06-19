@@ -11,7 +11,7 @@ export const fbrOfflineQueueRouter = Router();
 
 fbrOfflineQueueRouter.get("/", async (req, res, next) => {
   try {
-    res.json(await listOfflineQueue(req.query));
+    res.json(await listOfflineQueue(req.companyId!, req.query));
   } catch (error) {
     next(error);
   }
@@ -19,7 +19,7 @@ fbrOfflineQueueRouter.get("/", async (req, res, next) => {
 
 fbrOfflineQueueRouter.post("/", async (req, res, next) => {
   try {
-    res.status(201).json({ data: await enqueueOfflineInvoice(req.body) });
+    res.status(201).json({ data: await enqueueOfflineInvoice(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }
@@ -27,23 +27,23 @@ fbrOfflineQueueRouter.post("/", async (req, res, next) => {
 
 fbrOfflineQueueRouter.post("/add", async (req, res, next) => {
   try {
-    res.status(201).json({ data: await enqueueOfflineInvoice(req.body) });
+    res.status(201).json({ data: await enqueueOfflineInvoice(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }
 });
 
-fbrOfflineQueueRouter.get("/summary", async (_req, res, next) => {
+fbrOfflineQueueRouter.get("/summary", async (req, res, next) => {
   try {
-    res.json({ data: await getOfflineQueueSummary() });
+    res.json({ data: await getOfflineQueueSummary(req.companyId!) });
   } catch (error) {
     next(error);
   }
 });
 
-fbrOfflineQueueRouter.get("/status", async (_req, res, next) => {
+fbrOfflineQueueRouter.get("/status", async (req, res, next) => {
   try {
-    res.json({ data: await getOfflineQueueSummary() });
+    res.json({ data: await getOfflineQueueSummary(req.companyId!) });
   } catch (error) {
     next(error);
   }
@@ -51,7 +51,7 @@ fbrOfflineQueueRouter.get("/status", async (_req, res, next) => {
 
 fbrOfflineQueueRouter.get("/failed", async (req, res, next) => {
   try {
-    res.json(await listOfflineQueue({ ...req.query, status: "FAILED" }));
+    res.json(await listOfflineQueue(req.companyId!, { ...req.query, status: "FAILED" }));
   } catch (error) {
     next(error);
   }
@@ -59,7 +59,7 @@ fbrOfflineQueueRouter.get("/failed", async (req, res, next) => {
 
 fbrOfflineQueueRouter.post("/process", async (req, res, next) => {
   try {
-    res.json({ data: await processOfflineQueue(req.body ?? {}) });
+    res.json({ data: await processOfflineQueue(req.companyId!, req.body ?? {}) });
   } catch (error) {
     next(error);
   }
@@ -67,7 +67,7 @@ fbrOfflineQueueRouter.post("/process", async (req, res, next) => {
 
 fbrOfflineQueueRouter.post("/retry/:id", async (req, res, next) => {
   try {
-    res.json({ data: await retryOfflineQueueItem(req.params.id, req.body?.settings) });
+    res.json({ data: await retryOfflineQueueItem(req.companyId!, req.params.id, req.body?.settings) });
   } catch (error) {
     next(error);
   }
@@ -75,7 +75,7 @@ fbrOfflineQueueRouter.post("/retry/:id", async (req, res, next) => {
 
 fbrOfflineQueueRouter.post("/:id/retry", async (req, res, next) => {
   try {
-    res.json({ data: await retryOfflineQueueItem(req.params.id, req.body?.settings) });
+    res.json({ data: await retryOfflineQueueItem(req.companyId!, req.params.id, req.body?.settings) });
   } catch (error) {
     next(error);
   }

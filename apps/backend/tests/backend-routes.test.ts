@@ -3,6 +3,7 @@ import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { app } from "../src/app.js";
+import { signAccessToken } from "../src/lib/jwt.js";
 import { prisma } from "../src/lib/prisma.js";
 
 process.env.OFFLINE_QUEUE_AUTO_PROCESS_DISABLED = "true";
@@ -11,6 +12,8 @@ process.env.DEV_DB_FALLBACK_DISABLED = "true";
 let server: Server;
 let baseUrl = "";
 let authToken = "";
+let registeredUserId = "";
+let defaultCompanyId = "";
 
 before(async () => {
   server = createServer(app);
@@ -28,7 +31,10 @@ before(async () => {
     body: JSON.stringify({ email: testEmail, password: "TestRunner1!", fullName: "Test Runner" }),
   });
   const registerBody = await registerRes.json() as Record<string, any>;
+  assert.equal(registerRes.status, 201);
   authToken = registerBody.accessToken;
+  registeredUserId = registerBody.user.id;
+  defaultCompanyId = registerBody.defaultCompany.id;
 });
 
 after(async () => {
@@ -39,9 +45,680 @@ after(async () => {
 });
 
 describe("backend guide-compatible route contracts", () => {
+  test("authenticated requests resolve and authorize the active company", async () => {
+    const marker = `auth-company-${Date.now()}`;
+    const selectedCompany = await prisma.company.create({
+      data: { name: `Selected ${marker}`, kind: "BUSINESS" },
+    });
+    const deniedCompany = await prisma.company.create({
+      data: { name: `Denied ${marker}`, kind: "BUSINESS" },
+    });
+
+    try {
+      await prisma.userCompanyMembership.create({
+        data: {
+          userId: registeredUserId,
+          companyId: selectedCompany.id,
+          role: "ADMIN",
+          isDefault: false,
+        },
+      });
+
+      const defaultContext = await getJson("/api/auth/me");
+      assert.equal(defaultContext.activeCompany.id, defaultCompanyId);
+      assert.equal(defaultContext.activeCompany.membershipRole, "OWNER");
+      assert.equal(defaultContext.activeCompany.isDefault, true);
+
+      const selectedContext = await getJson("/api/auth/me", {
+        "X-Company-Id": selectedCompany.id,
+      });
+      assert.equal(selectedContext.activeCompany.id, selectedCompany.id);
+      assert.equal(selectedContext.activeCompany.name, `Selected ${marker}`);
+      assert.equal(selectedContext.activeCompany.membershipRole, "ADMIN");
+      assert.equal(selectedContext.activeCompany.isDefault, false);
+
+      const denied = await requestJson("/api/customers", {
+        method: "GET",
+        headers: { "X-Company-Id": deniedCompany.id },
+      });
+      assert.equal(denied.status, 403);
+      assert.equal(denied.body.error, "You do not have access to the requested company");
+    } finally {
+      await prisma.company.deleteMany({
+        where: { id: { in: [selectedCompany.id, deniedCompany.id] } },
+      });
+    }
+  });
+
+  test("a platform super admin can explicitly resolve an existing company", async () => {
+    const marker = `super-admin-company-${Date.now()}`;
+    const company = await prisma.company.create({
+      data: { name: `Support Target ${marker}`, kind: "BUSINESS" },
+    });
+    const user = await prisma.user.create({
+      data: {
+        email: `${marker}@test.internal`,
+        passwordHash: "not-used-in-this-test",
+        fullName: "Platform Support",
+        isSuperAdmin: true,
+      },
+    });
+
+    try {
+      const token = signAccessToken({
+        sub: user.id,
+        email: user.email,
+        isSuperAdmin: true,
+      });
+      const response = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Company-Id": company.id,
+        },
+      });
+      const body = await response.json() as Record<string, any>;
+
+      assert.equal(response.status, 200);
+      assert.equal(body.activeCompany.id, company.id);
+      assert.equal(body.activeCompany.membershipRole, null);
+      assert.equal(body.isSuperAdmin, true);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: user.id } });
+      await prisma.company.deleteMany({ where: { id: company.id } });
+    }
+  });
+
+  test("company management supports tenant creation, invitations, roles, defaults, and onboarding", async () => {
+    const marker = `company-management-${Date.now()}`;
+    const ownerRegistration = await registerTestUser(`owner-${marker}@test.internal`, "Business Owner");
+    const inviteeRegistration = await registerTestUser(`staff-${marker}@test.internal`, "Business Staff");
+    const superUser = await prisma.user.create({
+      data: {
+        email: `platform-${marker}@test.internal`,
+        passwordHash: "not-used-in-this-test",
+        fullName: "Platform Admin",
+        isSuperAdmin: true,
+        memberships: {
+          create: {
+            companyId: defaultCompanyId,
+            role: "ADMIN",
+            isDefault: true,
+          },
+        },
+      },
+    });
+    const superToken = signAccessToken({
+      sub: superUser.id,
+      email: superUser.email,
+      isSuperAdmin: true,
+    });
+    let businessCompanyId = "";
+
+    try {
+      const forbiddenCreate = await requestJson("/api/companies", {
+        method: "POST",
+        body: {
+          name: `Forbidden ${marker}`,
+          ownerEmail: ownerRegistration.user.email,
+        },
+      });
+      assert.equal(forbiddenCreate.status, 403);
+
+      const created = await requestJson("/api/companies", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${superToken}` },
+        body: {
+          name: `Business ${marker}`,
+          legalName: `Business ${marker} (Pvt) Ltd`,
+          ntn: "1234567",
+          ownerEmail: ownerRegistration.user.email,
+          businessNature: "Retailer",
+          primarySector: "FMCG",
+        },
+      });
+      assert.equal(created.status, 201);
+      businessCompanyId = created.body.data.company.id;
+      assert.equal(created.body.data.owner.assigned, true);
+
+      const ownerHeaders = {
+        Authorization: `Bearer ${ownerRegistration.accessToken}`,
+        "X-Company-Id": businessCompanyId,
+      };
+      const inviteeHeaders = { Authorization: `Bearer ${inviteeRegistration.accessToken}` };
+
+      const current = await requestJson("/api/companies/current", {
+        method: "GET",
+        headers: ownerHeaders,
+      });
+      assert.equal(current.status, 200);
+      assert.equal(current.body.data.kind, "BUSINESS");
+      assert.equal(current.body.data.onboarding.status, "PROFILE_PENDING");
+
+      const updatedCompany = await requestJson("/api/companies/current", {
+        method: "PATCH",
+        headers: ownerHeaders,
+        body: { name: `Updated Business ${marker}` },
+      });
+      assert.equal(updatedCompany.status, 200);
+      assert.equal(updatedCompany.body.data.name, `Updated Business ${marker}`);
+
+      const invited = await requestJson("/api/companies/current/invitations", {
+        method: "POST",
+        headers: ownerHeaders,
+        body: { email: inviteeRegistration.user.email, role: "MEMBER" },
+      });
+      assert.equal(invited.status, 201);
+      assert.equal(invited.body.data.status, "PENDING");
+      assert.equal(invited.body.data.emailDelivery.status, "DEV_LOGGED");
+      const invitationToken = invited.body.data.devInvitationToken;
+      assert.equal(typeof invitationToken, "string");
+
+      const wrongUserAcceptance = await requestJson(`/api/companies/invitations/${invitationToken}/accept`, {
+        method: "POST",
+        body: { makeDefault: true },
+      });
+      assert.equal(wrongUserAcceptance.status, 403);
+
+      const accepted = await requestJson(`/api/companies/invitations/${invitationToken}/accept`, {
+        method: "POST",
+        headers: inviteeHeaders,
+        body: { makeDefault: true },
+      });
+      assert.equal(accepted.status, 200);
+      assert.equal(accepted.body.data.membership.role, "MEMBER");
+      assert.equal(accepted.body.data.membership.isDefault, true);
+
+      const inviteeContext = await requestJson("/api/auth/me", {
+        method: "GET",
+        headers: inviteeHeaders,
+      });
+      assert.equal(inviteeContext.status, 200);
+      assert.equal(inviteeContext.body.activeCompany.id, businessCompanyId);
+
+      const members = await requestJson("/api/companies/current/members", {
+        method: "GET",
+        headers: ownerHeaders,
+      });
+      assert.equal(members.status, 200);
+      assert.equal(members.body.data.length, 2);
+      const ownerMembership = members.body.data.find((row: Record<string, any>) => row.user.id === ownerRegistration.user.id);
+      const inviteeMembership = members.body.data.find((row: Record<string, any>) => row.user.id === inviteeRegistration.user.id);
+      assert.equal(ownerMembership.role, "OWNER");
+      assert.equal(inviteeMembership.role, "MEMBER");
+
+      const promoted = await requestJson(`/api/companies/current/members/${inviteeMembership.id}`, {
+        method: "PATCH",
+        headers: ownerHeaders,
+        body: { role: "ADMIN" },
+      });
+      assert.equal(promoted.status, 200);
+      assert.equal(promoted.body.data.role, "ADMIN");
+
+      const adminHeaders = {
+        Authorization: `Bearer ${inviteeRegistration.accessToken}`,
+        "X-Company-Id": businessCompanyId,
+      };
+      const adminCannotDemoteOwner = await requestJson(`/api/companies/current/members/${ownerMembership.id}`, {
+        method: "PATCH",
+        headers: adminHeaders,
+        body: { role: "MEMBER" },
+      });
+      assert.equal(adminCannotDemoteOwner.status, 403);
+
+      const lastOwnerProtected = await requestJson(`/api/companies/current/members/${ownerMembership.id}`, {
+        method: "PATCH",
+        headers: ownerHeaders,
+        body: { role: "ADMIN" },
+      });
+      assert.equal(lastOwnerProtected.status, 409);
+      assert.equal(lastOwnerProtected.body.error, "A company must retain at least one owner.");
+
+      const irisSubmittedAt = new Date().toISOString();
+      const onboarding = await requestJson("/api/companies/current/onboarding", {
+        method: "PATCH",
+        headers: ownerHeaders,
+        body: {
+          status: "SANDBOX_TESTING",
+          businessNature: "Retailer",
+          primarySector: "FMCG",
+          technicalContactName: "Technical Lead",
+          technicalContactMobile: "03001234567",
+          technicalContactEmail: `technical-${marker}@test.internal`,
+          irisSubmittedAt,
+          ipWhitelistStatus: "APPROVED",
+          sandboxTokenStatus: "CONFIGURED",
+          sandboxStatus: "PASSED",
+          productionTokenStatus: "REQUESTED",
+          notes: "Ready for production token approval.",
+        },
+      });
+      assert.equal(onboarding.status, 200);
+      assert.equal(onboarding.body.data.status, "SANDBOX_TESTING");
+      assert.equal(onboarding.body.data.ipWhitelistStatus, "APPROVED");
+      assert.equal(onboarding.body.data.sandboxStatus, "PASSED");
+      assert.equal(typeof onboarding.body.data.ipWhitelistApprovedAt, "string");
+      assert.equal(typeof onboarding.body.data.sandboxCompletedAt, "string");
+      assert.ok(onboarding.body.data.progress.completed >= 5);
+
+      const onboardingRead = await requestJson("/api/companies/current/onboarding", {
+        method: "GET",
+        headers: ownerHeaders,
+      });
+      assert.equal(onboardingRead.body.data.nextStep, "Run and pass the required PRAL sandbox scenarios.");
+
+      const ownerDefault = await requestJson(`/api/companies/${businessCompanyId}/default`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${ownerRegistration.accessToken}` },
+      });
+      assert.equal(ownerDefault.status, 200);
+      const ownerContext = await requestJson("/api/auth/me", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${ownerRegistration.accessToken}` },
+      });
+      assert.equal(ownerContext.body.activeCompany.id, businessCompanyId);
+
+      const invitations = await requestJson("/api/companies/current/invitations", {
+        method: "GET",
+        headers: ownerHeaders,
+      });
+      assert.equal(invitations.status, 200);
+      assert.ok(invitations.body.data.some((row: Record<string, any>) => row.status === "ACCEPTED"));
+      assert.ok(invitations.body.data.some((row: Record<string, any>) => row.emailStatus === "DEV_LOGGED"));
+
+      const activity = await requestJson("/api/companies/current/activity", {
+        method: "GET",
+        headers: ownerHeaders,
+      });
+      assert.equal(activity.status, 200);
+      assert.ok(activity.body.data.some((row: Record<string, any>) => row.action === "invitation.email"));
+      assert.ok(activity.body.data.some((row: Record<string, any>) => row.action === "member.role_updated"));
+      assert.ok(activity.body.data.some((row: Record<string, any>) => row.action === "onboarding.updated"));
+
+      const allCompanies = await requestJson("/api/companies?all=true", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${superToken}` },
+      });
+      assert.equal(allCompanies.status, 200);
+      assert.ok(allCompanies.body.data.some((row: Record<string, any>) => row.id === businessCompanyId));
+    } finally {
+      if (businessCompanyId) {
+        await prisma.company.deleteMany({ where: { id: businessCompanyId } });
+      }
+      await prisma.user.deleteMany({
+        where: { id: { in: [ownerRegistration.user.id, inviteeRegistration.user.id, superUser.id] } },
+      });
+      await prisma.company.deleteMany({
+        where: { id: { in: [ownerRegistration.defaultCompany.id, inviteeRegistration.defaultCompany.id] } },
+      });
+    }
+  });
+
+  test("business and FBR APIs isolate reads and writes by active company", async () => {
+    const marker = `tenant-isolation-${Date.now()}`;
+    const company = await prisma.company.create({
+      data: { name: `Tenant B ${marker}`, kind: "BUSINESS" },
+    });
+    await prisma.userCompanyMembership.create({
+      data: {
+        userId: registeredUserId,
+        companyId: company.id,
+        role: "ADMIN",
+      },
+    });
+    const companyHeaders = { "X-Company-Id": company.id };
+    const previousTokens = await prisma.token.findMany({
+      where: {
+        companyId: { in: [defaultCompanyId, company.id] },
+        environment: "sandbox",
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    let serviceId = "";
+
+    try {
+      const customer = await prisma.customer.create({
+        data: {
+          companyId: company.id,
+          name: `Customer ${marker}`,
+          cnic: "3520112345671",
+          phone: "03001234567",
+          email: `${marker}@test.internal`,
+          province: "Punjab",
+          address: "Tenant B address",
+          registrationType: "Registered",
+        },
+      });
+      const staff = await prisma.staffMember.create({
+        data: {
+          companyId: company.id,
+          memberName: `Staff ${marker}`,
+          designation: "Accountant",
+          cnicNtn: "1234567890123",
+          phoneNumber: "03007654321",
+          email: `staff-${marker}@test.internal`,
+          province: "Sindh",
+          address: "Tenant B office",
+        },
+      });
+      const product = await prisma.product.create({
+        data: {
+          companyId: company.id,
+          name: `Product ${marker}`,
+          hsCode: "0101.2100",
+          hsDescription: "Tenant B product",
+          defaultSaleType: "Goods at standard rate",
+          defaultRate: "18",
+          defaultUom: "KG",
+        },
+      });
+      const invoice = await prisma.invoice.create({
+        data: {
+          companyId: company.id,
+          invoiceType: "Sale Invoice",
+          invoiceDate: new Date(),
+          invoiceRefNo: marker,
+          sellerNTNCNIC: "1234567",
+          sellerBusinessName: "Tenant B Seller",
+          sellerProvince: "Punjab",
+          sellerAddress: "Seller address",
+          buyerBusinessName: `Buyer ${marker}`,
+          buyerProvince: "Sindh",
+          buyerAddress: "Buyer address",
+          buyerRegistrationType: "Registered",
+          isOffline: true,
+          status: "OFFLINE",
+          offlineQueue: {
+            create: {
+              invoicePayload: makeInvoicePayload(marker),
+              status: "PENDING",
+            },
+          },
+        },
+        include: { offlineQueue: true },
+      });
+      const queueId = invoice.offlineQueue[0].id;
+
+      const tenantCustomerList = await getJson("/api/customers", companyHeaders);
+      assert.ok(tenantCustomerList.data.some((row: { id: string }) => row.id === customer.id));
+      const defaultCustomerList = await getJson("/api/customers");
+      assert.ok(!defaultCustomerList.data.some((row: { id: string }) => row.id === customer.id));
+      assert.equal((await requestJson(`/api/customers/${customer.id}`, { method: "GET" })).status, 404);
+      assert.equal((await requestJson(`/api/customers/${customer.id}`, {
+        method: "PUT",
+        body: { name: "Cross-tenant overwrite" },
+      })).status, 404);
+      assert.equal((await requestJson(`/api/customers/${customer.id}`, { method: "DELETE" })).status, 404);
+      assert.equal((await prisma.customer.findUnique({ where: { id: customer.id } }))?.name, `Customer ${marker}`);
+
+      const tenantStaff = await getJson("/api/staff-members", companyHeaders);
+      assert.ok(tenantStaff.data.some((row: { id: string }) => row.id === staff.id));
+      assert.equal((await requestJson(`/api/staff-members/${staff.id}`, { method: "GET" })).status, 404);
+      assert.equal((await requestJson(`/api/staff-members/${staff.id}`, {
+        method: "PUT",
+        body: { member_name: "Cross-tenant overwrite" },
+      })).status, 404);
+      assert.equal((await requestJson(`/api/staff-members/${staff.id}`, { method: "DELETE" })).status, 404);
+
+      const tenantProducts = await getJson("/api/products", companyHeaders);
+      assert.ok(tenantProducts.data.some((row: { id: string }) => row.id === product.id));
+      const defaultProducts = await getJson("/api/products");
+      assert.ok(!defaultProducts.data.some((row: { id: string }) => row.id === product.id));
+      assert.equal((await requestJson(`/api/products/${product.id}`, { method: "GET" })).status, 404);
+      assert.equal((await requestJson(`/api/products/${product.id}`, {
+        method: "PUT",
+        body: { productName: "Cross-tenant overwrite" },
+      })).status, 404);
+      assert.equal((await requestJson(`/api/products/${product.id}`, { method: "DELETE" })).status, 404);
+      assert.equal((await prisma.product.findUnique({ where: { id: product.id } }))?.isActive, true);
+
+      const tenantInvoices = await getJson(`/api/invoices?search=${encodeURIComponent(marker)}`, companyHeaders);
+      assert.equal(tenantInvoices.pagination.total, 1);
+      const defaultInvoices = await getJson(`/api/invoices?search=${encodeURIComponent(marker)}`);
+      assert.equal(defaultInvoices.pagination.total, 0);
+      assert.equal((await requestJson(`/api/invoices/${invoice.id}`, { method: "GET" })).status, 404);
+      assert.equal((await requestJson(`/api/dashboard/invoices/${invoice.id}`, { method: "DELETE" })).status, 404);
+      assert.ok(await prisma.invoice.findUnique({ where: { id: invoice.id } }));
+
+      const tenantQueue = await getJson("/api/queue", companyHeaders);
+      assert.ok(tenantQueue.data.some((row: { id: string }) => row.id === queueId));
+      const defaultQueue = await getJson("/api/queue");
+      assert.ok(!defaultQueue.data.some((row: { id: string }) => row.id === queueId));
+      assert.equal((await requestJson(`/api/queue/retry/${queueId}`, {
+        method: "POST",
+        body: { settings: { useMock: true } },
+      })).status, 404);
+
+      const createdService = await requestJson("/api/services", {
+        method: "POST",
+        headers: companyHeaders,
+        body: { service_name: `Service ${marker}`, rate: "100", unit_of_measure: "Each" },
+      });
+      assert.equal(createdService.status, 201);
+      serviceId = createdService.body.data.id;
+      const defaultServices = await getJson("/api/services");
+      assert.ok(!defaultServices.data.some((row: { id: string }) => row.id === serviceId));
+
+      await requestJson("/api/company-profile", {
+        method: "PUT",
+        headers: companyHeaders,
+        body: { company_name: `Profile ${marker}` },
+      });
+      const tenantProfile = await getJson("/api/company-profile", companyHeaders);
+      const defaultProfile = await getJson("/api/company-profile");
+      assert.equal(tenantProfile.data.company_name, `Profile ${marker}`);
+      assert.notEqual(defaultProfile.data.company_name, `Profile ${marker}`);
+
+      const defaultToken = `tenant-a-${marker}-aaaa`;
+      const companyToken = `tenant-b-${marker}-bbbb`;
+      await requestJson("/api/token", {
+        method: "PUT",
+        body: { environment: "sandbox", useMock: true, sandboxToken: defaultToken },
+      });
+      await requestJson("/api/token", {
+        method: "PUT",
+        headers: companyHeaders,
+        body: { environment: "sandbox", useMock: true, sandboxToken: companyToken },
+      });
+      const defaultSettings = await getJson("/api/token");
+      const tenantSettings = await getJson("/api/token", companyHeaders);
+      assert.equal(defaultSettings.data.tokens.sandbox.masked, "****aaaa");
+      assert.equal(tenantSettings.data.tokens.sandbox.masked, "****bbbb");
+
+      await requestJson("/api/sandbox/results", { method: "DELETE" });
+      await requestJson("/api/sandbox/results", { method: "DELETE", headers: companyHeaders });
+      const sandboxRun = await requestJson("/api/sandbox/run/SN001", {
+        method: "POST",
+        headers: companyHeaders,
+        body: { operation: "validate", settings: { useMock: true } },
+      });
+      assert.equal(sandboxRun.status, 200);
+      const defaultResults = await getJson("/api/sandbox/results");
+      const tenantResults = await getJson("/api/sandbox/results", companyHeaders);
+      assert.equal(defaultResults.data.SN001, undefined);
+      assert.equal(tenantResults.data.SN001.scenarioId, "SN001");
+    } finally {
+      if (serviceId) {
+        await requestJson(`/api/services/${serviceId}`, {
+          method: "DELETE",
+          headers: companyHeaders,
+        });
+      }
+      await prisma.sandboxResult.deleteMany({
+        where: { companyId: { in: [defaultCompanyId, company.id] } },
+      });
+      const currentTokens = await prisma.token.findMany({
+        where: {
+          companyId: { in: [defaultCompanyId, company.id] },
+          environment: "sandbox",
+          id: { notIn: previousTokens.map((token) => token.id) },
+        },
+        select: { id: true },
+      });
+      if (currentTokens.length > 0) {
+        await prisma.token.deleteMany({ where: { id: { in: currentTokens.map((token) => token.id) } } });
+      }
+      if (previousTokens.length > 0) {
+        await prisma.token.updateMany({
+          where: { id: { in: previousTokens.map((token) => token.id) } },
+          data: { isActive: true },
+        });
+      }
+      await prisma.company.deleteMany({ where: { id: company.id } });
+    }
+  });
+
+  test("company-owned FBR records and onboarding data are isolated by company", async () => {
+    const marker = `company-scope-${Date.now()}`;
+    const company = await prisma.company.create({
+      data: {
+        name: `Company Scope ${marker}`,
+        kind: "BUSINESS",
+      },
+    });
+
+    try {
+      await prisma.companyProfile.create({
+        data: {
+          companyId: company.id,
+          companyName: `Profile ${marker}`,
+        },
+      });
+      await prisma.staffMember.create({
+        data: {
+          companyId: company.id,
+          memberName: "Scope Tester",
+          designation: "Accountant",
+          cnicNtn: "1234567890123",
+          phoneNumber: "03001234567",
+          email: `${marker}@test.internal`,
+          province: "Punjab",
+          address: "Test address",
+        },
+      });
+      await prisma.customer.create({
+        data: {
+          companyId: company.id,
+          name: `Customer ${marker}`,
+          cnic: "3520112345671",
+          phone: "03007654321",
+          email: `customer-${marker}@test.internal`,
+          province: "Sindh",
+          address: "Customer address",
+          registrationType: "Registered",
+        },
+      });
+      await prisma.product.create({
+        data: {
+          companyId: company.id,
+          name: `Product ${marker}`,
+          hsCode: "0101.2100",
+          hsDescription: "Company-scoped test product",
+          defaultSaleType: "Goods at standard rate (default)",
+          defaultRate: "18",
+          defaultUom: "KG",
+        },
+      });
+      await prisma.token.create({
+        data: {
+          companyId: company.id,
+          environment: "sandbox",
+          token: `encrypted-${marker}`,
+        },
+      });
+      const invoice = await prisma.invoice.create({
+        data: {
+          companyId: company.id,
+          invoiceType: "Sale Invoice",
+          invoiceDate: new Date(),
+          sellerNTNCNIC: "1234567",
+          sellerBusinessName: "Scope Seller",
+          sellerProvince: "Punjab",
+          sellerAddress: "Seller address",
+          buyerBusinessName: "Scope Buyer",
+          buyerProvince: "Sindh",
+          buyerAddress: "Buyer address",
+          buyerRegistrationType: "Registered",
+          items: {
+            create: {
+              hsCode: "0101.2100",
+              productDescription: "Company-scoped test item",
+              rate: "18%",
+              uom: "KG",
+              quantity: 1,
+              totalValues: 118,
+              valueSalesExcludingST: 100,
+              fixedNotifiedValueOrRetailPrice: 0,
+              salesTaxApplicable: 18,
+              salesTaxWithheldAtSource: 0,
+              saleType: "Goods at standard rate (default)",
+            },
+          },
+        },
+      });
+      await prisma.offlineQueue.create({
+        data: {
+          invoiceId: invoice.id,
+          invoicePayload: { marker },
+        },
+      });
+      await prisma.fbrOnboarding.create({
+        data: {
+          companyId: company.id,
+          businessNature: "Manufacturer",
+          primarySector: "FMCG",
+        },
+      });
+      await prisma.sandboxResult.create({
+        data: {
+          companyId: company.id,
+          scenarioId: "SN001",
+          scenarioName: "Standard-rate registered buyer",
+          operation: "VALIDATE",
+          status: "PASSED",
+          statusCode: "00",
+          payload: { marker },
+          response: { statusCode: "00" },
+          passedAt: new Date(),
+        },
+      });
+
+      const ownedData = await prisma.company.findUnique({
+        where: { id: company.id },
+        include: {
+          profile: true,
+          staffMembers: true,
+          customers: true,
+          invoices: true,
+          products: true,
+          tokens: true,
+          onboarding: true,
+          sandboxResults: true,
+        },
+      });
+
+      assert.ok(ownedData?.profile);
+      assert.equal(ownedData.staffMembers.length, 1);
+      assert.equal(ownedData.customers.length, 1);
+      assert.equal(ownedData.invoices.length, 1);
+      assert.equal(ownedData.products.length, 1);
+      assert.equal(ownedData.tokens.length, 1);
+      assert.ok(ownedData.onboarding);
+      assert.equal(ownedData.sandboxResults.length, 1);
+
+      await prisma.company.delete({ where: { id: company.id } });
+
+      assert.equal(await prisma.invoice.findUnique({ where: { id: invoice.id } }), null);
+      assert.equal(await prisma.offlineQueue.count({ where: { invoiceId: invoice.id } }), 0);
+    } finally {
+      await prisma.company.deleteMany({ where: { id: company.id } });
+    }
+  });
+
   test("token status and save flow work through /api/token", async () => {
     const previousTokens = await prisma.token.findMany({
       where: {
+        companyId: defaultCompanyId,
         environment: "sandbox",
         isActive: true,
       },
@@ -75,6 +752,7 @@ describe("backend guide-compatible route contracts", () => {
     } finally {
       const activeAfterTest = await prisma.token.findMany({
         where: {
+          companyId: defaultCompanyId,
           environment: "sandbox",
           isActive: true,
           id: {
@@ -125,6 +803,7 @@ describe("backend guide-compatible route contracts", () => {
     const marker = `CODX-${Date.now()}`;
     const invoice = await prisma.invoice.create({
       data: {
+        companyId: defaultCompanyId,
         fbrInvoiceNumber: `${marker}-FBR`,
         invoiceType: "Sale Invoice",
         invoiceDate: new Date("2026-05-08T00:00:00.000Z"),
@@ -264,6 +943,7 @@ describe("backend guide-compatible route contracts", () => {
     const marker = `QUEUE-${Date.now()}`;
     const invoice = await prisma.invoice.create({
       data: {
+        companyId: defaultCompanyId,
         invoiceType: "Sale Invoice",
         invoiceDate: new Date("2026-05-08T00:00:00.000Z"),
         invoiceRefNo: marker,
@@ -532,6 +1212,7 @@ describe("backend guide-compatible route contracts", () => {
     const marker = `Codex Product ${Date.now()}`;
     const product = await prisma.product.create({
       data: {
+        companyId: defaultCompanyId,
         name: marker,
         hsCode: "0101.2100",
         hsDescription: "Pure-bred breeding horses",
@@ -749,7 +1430,7 @@ describe("backend guide-compatible route contracts", () => {
   test("token encryption: DB stores ciphertext and masked response uses plaintext last-4", async () => {
     const testToken = `enc-roundtrip-${Date.now()}-abcd`;
     const previousTokens = await prisma.token.findMany({
-      where: { environment: "sandbox", isActive: true },
+      where: { companyId: defaultCompanyId, environment: "sandbox", isActive: true },
       select: { id: true },
     });
 
@@ -770,7 +1451,7 @@ describe("backend guide-compatible route contracts", () => {
 
       // DB must store ciphertext, not the plaintext
       const dbRow = await prisma.token.findFirst({
-        where: { environment: "sandbox", isActive: true },
+        where: { companyId: defaultCompanyId, environment: "sandbox", isActive: true },
         orderBy: { createdAt: "desc" },
         select: { token: true },
       });
@@ -786,7 +1467,7 @@ describe("backend guide-compatible route contracts", () => {
       );
     } finally {
       await prisma.token.updateMany({
-        where: { environment: "sandbox", isActive: true },
+        where: { companyId: defaultCompanyId, environment: "sandbox", isActive: true },
         data: { isActive: false },
       });
       if (previousTokens.length > 0) {
@@ -816,7 +1497,11 @@ describe("backend guide-compatible route contracts", () => {
     assert.equal(typeof result.statusCode, "string");
     assert.equal(typeof result.durationMs, "number");
     assert.equal(result.operationType, "submit");
+    assert.equal(result.runMode, "mock");
     assert.ok(Array.isArray(result.errors));
+    assert.ok(Array.isArray(result.mappedErrors));
+    assert.equal(typeof result.payload, "object");
+    assert.equal(typeof result.raw, "object");
 
     // mock mode always succeeds
     assert.equal(result.passed, true, "mock submit should pass");
@@ -828,6 +1513,9 @@ describe("backend guide-compatible route contracts", () => {
     assert.ok(sn001, "SN001 should appear in status scenarios");
     assert.equal(sn001.overallStatus, "passed");
     assert.ok(sn001.lastResult?.invoiceNumber, "lastResult should include the invoice number");
+    assert.equal(sn001.lastResult?.runMode, "mock");
+    assert.equal(typeof sn001.lastResult?.payload, "object");
+    assert.ok(Array.isArray(sn001.lastResult?.mappedErrors));
 
     // results endpoint should include SN001
     const results = await getJson("/api/sandbox/results");
@@ -840,13 +1528,27 @@ describe("backend guide-compatible route contracts", () => {
       body: {
         operation: "submit",
         settings: { useMock: true },
-        scenarioIds: ["SN001", "SN002", "SN005", "SN006", "SN007", "SN008", "SN017", "SN018", "SN019"],
+        scenarioIds: [
+          "SN001",
+          "SN002",
+          "SN003",
+          "SN005",
+          "SN006",
+          "SN007",
+          "SN008",
+          "SN009",
+          "SN010",
+          "SN012",
+          "SN017",
+          "SN018",
+          "SN019",
+        ],
       },
     });
     assert.equal(batchRes.status, 200);
     const batch = batchRes.body.data;
-    assert.equal(batch.processed, 9, "all 9 required scenarios should run");
-    assert.equal(batch.passed, 9, "all 9 should pass in mock mode");
+    assert.equal(batch.processed, 13, "all 13 required scenarios should run");
+    assert.equal(batch.passed, 13, "all 13 should pass in mock mode");
     assert.equal(batch.failed, 0);
     assert.equal(batch.skipped, 0);
 
@@ -859,9 +1561,9 @@ describe("backend guide-compatible route contracts", () => {
   });
 });
 
-async function getJson(path: string) {
+async function getJson(path: string, extraHeaders: Record<string, string> = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: { Authorization: `Bearer ${authToken}` },
+    headers: { Authorization: `Bearer ${authToken}`, ...extraHeaders },
   });
   assert.equal(response.ok, true, `${path} returned HTTP ${response.status}`);
   return response.json() as Promise<Record<string, any>>;
@@ -872,9 +1574,13 @@ async function requestJson(
   options: {
     method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
     body?: unknown;
+    headers?: Record<string, string>;
   },
 ) {
-  const headers: Record<string, string> = { Authorization: `Bearer ${authToken}` };
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${authToken}`,
+    ...options.headers,
+  };
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method,
@@ -893,6 +1599,17 @@ async function requestJson(
     status: response.status,
     body: body as Record<string, any>,
   };
+}
+
+async function registerTestUser(email: string, fullName: string) {
+  const response = await fetch(`${baseUrl}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: "TestRunner1!", fullName }),
+  });
+  const body = await response.json() as Record<string, any>;
+  assert.equal(response.status, 201);
+  return body;
 }
 
 function makeInvoicePayload(invoiceRefNo: string) {

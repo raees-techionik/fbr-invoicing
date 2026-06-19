@@ -6,6 +6,7 @@ import { FiArrowRight, FiLock, FiMail, FiShield } from "react-icons/fi";
 import logo from "./Images/New Black Logo 1.png";
 import icon from "./Images/TechionikIcon.png";
 import "./Login.css";
+import { setActiveCompanyId } from "./services/companySession";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -35,10 +36,11 @@ const Login = () => {
         password,
       });
 
-      const { accessToken, user } = response.data;
+      const { accessToken, user, activeCompany } = response.data;
 
       localStorage.setItem("token", accessToken);
       localStorage.setItem("email", user.email);
+      setActiveCompanyId(activeCompany?.id);
 
       navigate("/dashboard");
     } catch (err) {

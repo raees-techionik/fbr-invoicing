@@ -10,7 +10,7 @@ export const fbrSettingsRouter = Router();
 
 fbrSettingsRouter.get("/", async (req, res, next) => {
   try {
-    res.json({ data: await getPublicFbrSettings(req.query.checkLive === "true") });
+    res.json({ data: await getPublicFbrSettings(req.companyId!, req.query.checkLive === "true") });
   } catch (error) {
     next(error);
   }
@@ -18,7 +18,7 @@ fbrSettingsRouter.get("/", async (req, res, next) => {
 
 fbrSettingsRouter.put("/", async (req, res, next) => {
   try {
-    res.json({ data: await updateFbrSettings(req.body) });
+    res.json({ data: await updateFbrSettings(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }
@@ -26,7 +26,7 @@ fbrSettingsRouter.put("/", async (req, res, next) => {
 
 fbrSettingsRouter.post("/", async (req, res, next) => {
   try {
-    res.status(201).json({ data: await updateFbrSettings(req.body) });
+    res.status(201).json({ data: await updateFbrSettings(req.companyId!, req.body) });
   } catch (error) {
     next(error);
   }
@@ -35,7 +35,7 @@ fbrSettingsRouter.post("/", async (req, res, next) => {
 fbrSettingsRouter.get("/token-status", async (req, res, next) => {
   try {
     const environment = req.query.environment === "production" ? "production" : "sandbox";
-    res.json({ data: await getTokenStatus(environment, req.query.checkLive === "true") });
+    res.json({ data: await getTokenStatus(req.companyId!, environment, req.query.checkLive === "true") });
   } catch (error) {
     next(error);
   }
@@ -43,7 +43,7 @@ fbrSettingsRouter.get("/token-status", async (req, res, next) => {
 
 fbrSettingsRouter.get("/status", async (req, res, next) => {
   try {
-    const settings = await getPublicFbrSettings(req.query.checkLive === "true");
+    const settings = await getPublicFbrSettings(req.companyId!, req.query.checkLive === "true");
     res.json({
       data: {
         environment: settings.environment,

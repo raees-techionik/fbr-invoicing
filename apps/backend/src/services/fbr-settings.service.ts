@@ -71,11 +71,11 @@ interface OutboundIpResult {
   checkedAt: string;
 }
 
-const SETTINGS_CACHE_KEY = "fbr:settings:global";
+const settingsCacheKey = (companyId: string) => `fbr:settings:${companyId}`;
 const FBR_BASE_URL = process.env.FBR_BASE_URL ?? "https://gw.fbr.gov.pk";
 
-export async function getPublicFbrSettings(checkLive = false): Promise<PublicFbrSettings> {
-  const settings = await getStoredFbrSettings();
+export async function getPublicFbrSettings(companyId: string, checkLive = false): Promise<PublicFbrSettings> {
+  const settings = await getStoredFbrSettings(companyId);
 
   return {
     environment: settings.environment,
@@ -85,16 +85,16 @@ export async function getPublicFbrSettings(checkLive = false): Promise<PublicFbr
       production: maskToken(settings.productionToken),
     },
     tokenStatus: {
-      sandbox: await getTokenStatus("sandbox", checkLive),
-      production: await getTokenStatus("production", checkLive),
-      active: await getTokenStatus(settings.environment, checkLive),
+      sandbox: await getTokenStatus(companyId, "sandbox", checkLive),
+      production: await getTokenStatus(companyId, "production", checkLive),
+      active: await getTokenStatus(companyId, settings.environment, checkLive),
     },
     updatedAt: settings.updatedAt,
   };
 }
 
-export async function updateFbrSettings(input: UpdateSettingsInput): Promise<PublicFbrSettings> {
-  const current = await getStoredFbrSettings();
+export async function updateFbrSettings(companyId: string, input: UpdateSettingsInput): Promise<PublicFbrSettings> {
+  const current = await getStoredFbrSettings(companyId);
 
   const next: CachedFbrSettings = {
     environment: input.environment === undefined ? current.environment : parseEnvironment(input.environment),
@@ -103,29 +103,30 @@ export async function updateFbrSettings(input: UpdateSettingsInput): Promise<Pub
   };
 
   if (parseBoolean(input.clearSandboxToken, false)) {
-    await deactivateTokens("sandbox");
+    await deactivateTokens(companyId, "sandbox");
   } else if (stringValue(input.sandboxToken)) {
-    await storeActiveToken("sandbox", stringValue(input.sandboxToken));
+    await storeActiveToken(companyId, "sandbox", stringValue(input.sandboxToken));
   }
 
   if (parseBoolean(input.clearProductionToken, false)) {
-    await deactivateTokens("production");
+    await deactivateTokens(companyId, "production");
   } else if (stringValue(input.productionToken)) {
-    await storeActiveToken("production", stringValue(input.productionToken));
+    await storeActiveToken(companyId, "production", stringValue(input.productionToken));
   }
 
-  await getCache().set(SETTINGS_CACHE_KEY, JSON.stringify(next));
-  return getPublicFbrSettings(false);
+  await getCache().set(settingsCacheKey(companyId), JSON.stringify(next));
+  await syncOnboardingTokenStatus(companyId);
+  return getPublicFbrSettings(companyId, false);
 }
 
-export async function getRuntimeFbrSettings(overrides: {
+export async function getRuntimeFbrSettings(companyId: string, overrides: {
   environment?: unknown;
   token?: unknown;
   sandboxToken?: unknown;
   productionToken?: unknown;
   useMock?: unknown;
 } = {}): Promise<RuntimeFbrSettings> {
-  const stored = await getStoredFbrSettings();
+  const stored = await getStoredFbrSettings(companyId);
   const environment = overrides.environment === undefined ? stored.environment : parseEnvironment(overrides.environment);
   const useMock = overrides.useMock === undefined ? stored.useMock : parseBoolean(overrides.useMock, stored.useMock);
   const requestToken = stringValue(overrides.token);
@@ -139,8 +140,7 @@ export async function getRuntimeFbrSettings(overrides: {
     stringValue(overrides.productionToken) ||
     decryptToken(stored.productionToken) ||
     stringValue(process.env.FBR_PRODUCTION_TOKEN);
-  const fallbackToken = stringValue(process.env.FBR_API_TOKEN);
-  const activeToken = (environment === "production" ? productionToken : sandboxToken) || fallbackToken;
+  const activeToken = environment === "production" ? productionToken : sandboxToken;
 
   return {
     environment,
@@ -151,8 +151,8 @@ export async function getRuntimeFbrSettings(overrides: {
   };
 }
 
-export async function getTokenStatus(environment: FbrEnvironment, checkLive = false): Promise<TokenStatus> {
-  const settings = await getRuntimeFbrSettings({ environment });
+export async function getTokenStatus(companyId: string, environment: FbrEnvironment, checkLive = false): Promise<TokenStatus> {
+  const settings = await getRuntimeFbrSettings(companyId, { environment });
   const checkedAt = new Date().toISOString();
 
   if (settings.useMock) {
@@ -252,12 +252,12 @@ export async function getOutboundIp(): Promise<OutboundIpResult> {
   }
 }
 
-async function getStoredFbrSettings(): Promise<StoredFbrSettings> {
-  const cachedSettings = await getCachedFbrSettings();
-  await seedEnvironmentTokensIfNeeded();
+async function getStoredFbrSettings(companyId: string): Promise<StoredFbrSettings> {
+  const cachedSettings = await getCachedFbrSettings(companyId);
+  await seedEnvironmentTokensIfNeeded(companyId);
   const [sandboxToken, productionToken] = await Promise.all([
-    getActiveEncryptedToken("sandbox"),
-    getActiveEncryptedToken("production"),
+    getActiveEncryptedToken(companyId, "sandbox"),
+    getActiveEncryptedToken(companyId, "production"),
   ]);
 
   return {
@@ -267,8 +267,8 @@ async function getStoredFbrSettings(): Promise<StoredFbrSettings> {
   };
 }
 
-async function getCachedFbrSettings(): Promise<CachedFbrSettings> {
-  const cached = await getCache().get(SETTINGS_CACHE_KEY);
+async function getCachedFbrSettings(companyId: string): Promise<CachedFbrSettings> {
+  const cached = await getCache().get(settingsCacheKey(companyId));
 
   if (cached) {
     const parsed = JSON.parse(cached) as Partial<StoredFbrSettings>;
@@ -285,18 +285,28 @@ async function getCachedFbrSettings(): Promise<CachedFbrSettings> {
     updatedAt: new Date().toISOString(),
   };
 
-  await getCache().set(SETTINGS_CACHE_KEY, JSON.stringify(initial));
+  await getCache().set(settingsCacheKey(companyId), JSON.stringify(initial));
   return initial;
 }
 
-async function seedEnvironmentTokensIfNeeded(): Promise<void> {
+async function seedEnvironmentTokensIfNeeded(companyId: string): Promise<void> {
+  const fallbackToken = process.env.FBR_API_TOKEN;
+  const fallbackEnvironment = parseEnvironment(process.env.FBR_ENVIRONMENT);
   await Promise.all([
-    seedEnvironmentTokenIfNeeded("sandbox", process.env.FBR_SANDBOX_TOKEN),
-    seedEnvironmentTokenIfNeeded("production", process.env.FBR_PRODUCTION_TOKEN),
+    seedEnvironmentTokenIfNeeded(
+      companyId,
+      "sandbox",
+      process.env.FBR_SANDBOX_TOKEN ?? (fallbackEnvironment === "sandbox" ? fallbackToken : undefined),
+    ),
+    seedEnvironmentTokenIfNeeded(
+      companyId,
+      "production",
+      process.env.FBR_PRODUCTION_TOKEN ?? (fallbackEnvironment === "production" ? fallbackToken : undefined),
+    ),
   ]);
 }
 
-async function seedEnvironmentTokenIfNeeded(environment: FbrEnvironment, rawToken: unknown): Promise<void> {
+async function seedEnvironmentTokenIfNeeded(companyId: string, environment: FbrEnvironment, rawToken: unknown): Promise<void> {
   const token = stringValue(rawToken);
 
   if (!token) {
@@ -305,6 +315,7 @@ async function seedEnvironmentTokenIfNeeded(environment: FbrEnvironment, rawToke
 
   const existing = await prisma.token.findFirst({
     where: {
+      companyId,
       environment,
       isActive: true,
     },
@@ -317,12 +328,13 @@ async function seedEnvironmentTokenIfNeeded(environment: FbrEnvironment, rawToke
     return;
   }
 
-  await storeActiveToken(environment, token);
+  await storeActiveToken(companyId, environment, token);
 }
 
-async function getActiveEncryptedToken(environment: FbrEnvironment): Promise<string | undefined> {
+async function getActiveEncryptedToken(companyId: string, environment: FbrEnvironment): Promise<string | undefined> {
   const token = await prisma.token.findFirst({
     where: {
+      companyId,
       environment,
       isActive: true,
     },
@@ -337,10 +349,11 @@ async function getActiveEncryptedToken(environment: FbrEnvironment): Promise<str
   return token?.token;
 }
 
-async function storeActiveToken(environment: FbrEnvironment, rawToken: string): Promise<void> {
+async function storeActiveToken(companyId: string, environment: FbrEnvironment, rawToken: string): Promise<void> {
   await prisma.$transaction([
     prisma.token.updateMany({
       where: {
+        companyId,
         environment,
         isActive: true,
       },
@@ -350,6 +363,7 @@ async function storeActiveToken(environment: FbrEnvironment, rawToken: string): 
     }),
     prisma.token.create({
       data: {
+        companyId,
         environment,
         token: encryptToken(rawToken),
         isActive: true,
@@ -358,14 +372,34 @@ async function storeActiveToken(environment: FbrEnvironment, rawToken: string): 
   ]);
 }
 
-async function deactivateTokens(environment: FbrEnvironment): Promise<void> {
+async function deactivateTokens(companyId: string, environment: FbrEnvironment): Promise<void> {
   await prisma.token.updateMany({
     where: {
+      companyId,
       environment,
       isActive: true,
     },
     data: {
       isActive: false,
+    },
+  });
+}
+
+async function syncOnboardingTokenStatus(companyId: string): Promise<void> {
+  const [sandboxTokens, productionTokens] = await Promise.all([
+    prisma.token.count({ where: { companyId, environment: "sandbox", isActive: true } }),
+    prisma.token.count({ where: { companyId, environment: "production", isActive: true } }),
+  ]);
+  await prisma.fbrOnboarding.upsert({
+    where: { companyId },
+    create: {
+      companyId,
+      sandboxTokenStatus: sandboxTokens > 0 ? "CONFIGURED" : "MISSING",
+      productionTokenStatus: productionTokens > 0 ? "CONFIGURED" : "MISSING",
+    },
+    update: {
+      sandboxTokenStatus: sandboxTokens > 0 ? "CONFIGURED" : "MISSING",
+      productionTokenStatus: productionTokens > 0 ? "CONFIGURED" : "MISSING",
     },
   });
 }

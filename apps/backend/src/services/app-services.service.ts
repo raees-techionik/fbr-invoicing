@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getCache } from "../lib/cache.js";
 
-const CACHE_KEY = "app:services";
+const cacheKey = (companyId: string) => `app:services:${companyId}`;
 
 interface ServiceRecord {
   id: string;
@@ -20,20 +20,20 @@ function httpError(status: number, message: string): Error & { status: number } 
   return err;
 }
 
-async function readAll(): Promise<ServiceRecord[]> {
-  const cached = await getCache().get(CACHE_KEY);
+async function readAll(companyId: string): Promise<ServiceRecord[]> {
+  const cached = await getCache().get(cacheKey(companyId));
   if (!cached) return [];
   return JSON.parse(cached) as ServiceRecord[];
 }
 
-async function writeAll(records: ServiceRecord[]): Promise<void> {
-  await getCache().set(CACHE_KEY, JSON.stringify(records));
+async function writeAll(companyId: string, records: ServiceRecord[]): Promise<void> {
+  await getCache().set(cacheKey(companyId), JSON.stringify(records));
 }
 
-export async function listServices(params: { search?: string; limit?: number } = {}) {
+export async function listServices(companyId: string, params: { search?: string; limit?: number } = {}) {
   const search = params.search?.trim().toLowerCase() || "";
   const take = Math.min(Math.max(Number(params.limit) || 100, 1), 250);
-  const records = await readAll();
+  const records = await readAll(companyId);
 
   const filtered = search
     ? records.filter((r) =>
@@ -45,14 +45,14 @@ export async function listServices(params: { search?: string; limit?: number } =
   return filtered.slice(0, take);
 }
 
-export async function getService(id: string) {
-  const records = await readAll();
+export async function getService(companyId: string, id: string) {
+  const records = await readAll(companyId);
   const record = records.find((r) => r.id === id);
   if (!record) throw httpError(404, "Service not found.");
   return record;
 }
 
-export async function createService(body: Record<string, unknown>) {
+export async function createService(companyId: string, body: Record<string, unknown>) {
   const now = new Date().toISOString();
   const record: ServiceRecord = {
     id: randomUUID(),
@@ -64,13 +64,13 @@ export async function createService(body: Record<string, unknown>) {
     created_at: now,
     updated_at: now,
   };
-  const records = await readAll();
-  await writeAll([...records, record]);
+  const records = await readAll(companyId);
+  await writeAll(companyId, [...records, record]);
   return record;
 }
 
-export async function updateService(id: string, body: Record<string, unknown>) {
-  const records = await readAll();
+export async function updateService(companyId: string, id: string, body: Record<string, unknown>) {
+  const records = await readAll(companyId);
   const idx = records.findIndex((r) => r.id === id);
   if (idx === -1) throw httpError(404, "Service not found.");
 
@@ -85,14 +85,14 @@ export async function updateService(id: string, body: Record<string, unknown>) {
     updated_at: new Date().toISOString(),
   };
   records[idx] = updated;
-  await writeAll(records);
+  await writeAll(companyId, records);
   return updated;
 }
 
-export async function deleteService(id: string) {
-  const records = await readAll();
+export async function deleteService(companyId: string, id: string) {
+  const records = await readAll(companyId);
   const next = records.filter((r) => r.id !== id);
   if (next.length === records.length) throw httpError(404, "Service not found.");
-  await writeAll(next);
+  await writeAll(companyId, next);
   return { id, deleted: true };
 }

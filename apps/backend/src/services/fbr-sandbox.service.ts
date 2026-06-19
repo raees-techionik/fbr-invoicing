@@ -1,12 +1,15 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { getCache } from "../lib/cache.js";
+import type { Prisma } from "../../generated/prisma/client.js";
+import { prisma } from "../lib/prisma.js";
 import {
   submitInvoiceToFbr,
   validateInvoiceWithFbr,
   type FbrInvoiceInput,
   type FbrInvoiceSettings,
 } from "./fbr-invoice.service.js";
+import { getFbrErrorDefinition, type NormalizedFbrError } from "./fbr-error.service.js";
+import { getOutboundIp, getPublicFbrSettings, getRuntimeFbrSettings } from "./fbr-settings.service.js";
 
 export type SandboxOperationType = "validate" | "submit";
 export type SandboxOverallStatus = "not_run" | "passed" | "failed" | "placeholder";
@@ -31,7 +34,19 @@ export interface SandboxRunResult {
   runAt: string;
   durationMs: number;
   operationType: SandboxOperationType;
+  runMode: "mock" | "live";
+  payload: unknown;
+  mappedErrors: SandboxErrorDetail[];
   raw: unknown;
+}
+
+export interface SandboxErrorDetail {
+  code: string;
+  field: string;
+  scope: string;
+  itemIndex?: number;
+  fbrMessage: string;
+  fixHint: string;
 }
 
 export interface SandboxScenarioStatus {
@@ -70,7 +85,33 @@ export interface SandboxRunOptions {
   scenarioIds?: string[];
 }
 
-const SANDBOX_RESULTS_CACHE_KEY = "fbr:sandbox:results";
+export type SandboxPreflightSeverity = "success" | "warning" | "danger";
+
+export interface SandboxPreflightCheck {
+  id: string;
+  label: string;
+  passed: boolean;
+  severity: SandboxPreflightSeverity;
+  message: string;
+  action: string;
+}
+
+export interface SandboxPreflightResult {
+  readyForLive: boolean;
+  canRunMock: boolean;
+  canRunLive: boolean;
+  generatedAt: string;
+  environment: "sandbox" | "production";
+  useMock: boolean;
+  outboundIp: Awaited<ReturnType<typeof getOutboundIp>>;
+  summary: {
+    totalChecks: number;
+    passedChecks: number;
+    blockingIssues: number;
+    warningIssues: number;
+  };
+  checks: SandboxPreflightCheck[];
+}
 
 // ─── Seller / Buyer shared blocks ────────────────────────────────────────────
 
@@ -96,10 +137,6 @@ const BASE_BUYER_UNREGISTERED = {
   buyerAddress: "789 Saddar, Karachi",
   buyerRegistrationType: "Unregistered",
 };
-
-function placeholderInvoice(scenarioId: string): FbrInvoiceInput {
-  return { invoiceType: "Sale Invoice", scenarioId, items: [] };
-}
 
 // ─── Scenario Fixtures (I1 – I7) ─────────────────────────────────────────────
 
@@ -428,38 +465,142 @@ const SANDBOX_SCENARIOS: SandboxScenario[] = [
     },
   },
 
-  // I7 — Sector-specific placeholders (fill in once business type confirmed by client)
+  // I7 — Sector-specific fixtures
   {
     id: "SN003",
-    name: "Steel Sector — Placeholder",
-    description: "Steel sector goods. Fill in HS codes, SRO details, and rates once client business type is confirmed.",
+    name: "Steel Sector",
+    description: "Steel sector goods using a sector-specific HS code and standard sales tax treatment.",
     category: "sector-specific",
-    isPlaceholder: true,
-    invoice: placeholderInvoice("SN003"),
+    isPlaceholder: false,
+    invoice: {
+      invoiceType: "Sale Invoice",
+      ...BASE_SELLER,
+      ...BASE_BUYER_REGISTERED,
+      scenarioId: "SN003",
+      items: [
+        {
+          hsCode: "7214.2000",
+          productDescription: "Test Steel Bars",
+          rate: "18%",
+          uoM: "KG",
+          quantity: 1000,
+          valueSalesExcludingST: 250000,
+          salesTaxApplicable: 45000,
+          furtherTax: 0,
+          extraTax: "",
+          fedPayable: 0,
+          discount: 0,
+          totalValues: 295000,
+          fixedNotifiedValueOrRetailPrice: 0,
+          salesTaxWithheldAtSource: 0,
+          saleType: "Goods at standard rate (default)",
+          sroScheduleNo: "",
+          sroItemSerialNo: "",
+        },
+      ],
+    },
   },
   {
     id: "SN009",
-    name: "Textile Sector — Placeholder",
-    description: "Textile sector goods. Fill in HS codes, SRO details, and rates once client business type is confirmed.",
+    name: "Textile Sector",
+    description: "Textile sector goods using reduced-rate textile treatment.",
     category: "sector-specific",
-    isPlaceholder: true,
-    invoice: placeholderInvoice("SN009"),
+    isPlaceholder: false,
+    invoice: {
+      invoiceType: "Sale Invoice",
+      ...BASE_SELLER,
+      ...BASE_BUYER_REGISTERED,
+      scenarioId: "SN009",
+      items: [
+        {
+          hsCode: "5208.1100",
+          productDescription: "Test Cotton Fabric",
+          rate: "5%",
+          uoM: "METER",
+          quantity: 500,
+          valueSalesExcludingST: 120000,
+          salesTaxApplicable: 6000,
+          furtherTax: 0,
+          extraTax: "",
+          fedPayable: 0,
+          discount: 0,
+          totalValues: 126000,
+          fixedNotifiedValueOrRetailPrice: 0,
+          salesTaxWithheldAtSource: 0,
+          saleType: "Goods at Reduced Rate",
+          sroScheduleNo: "SRO 1125(I)/2011",
+          sroItemSerialNo: "9",
+        },
+      ],
+    },
   },
   {
     id: "SN010",
-    name: "Telecom Sector — Placeholder",
-    description: "Telecom sector services. Fill in service codes and FED/ST treatment once client business type is confirmed.",
+    name: "Telecom Sector",
+    description: "Telecom sector services with sales tax and FED in sales-tax mode.",
     category: "sector-specific",
-    isPlaceholder: true,
-    invoice: placeholderInvoice("SN010"),
+    isPlaceholder: false,
+    invoice: {
+      invoiceType: "Sale Invoice",
+      ...BASE_SELLER,
+      ...BASE_BUYER_REGISTERED,
+      scenarioId: "SN010",
+      items: [
+        {
+          hsCode: "9804.0000",
+          productDescription: "Test Telecom Services",
+          rate: "19.5%",
+          uoM: "SERVICE",
+          quantity: 1,
+          valueSalesExcludingST: 100000,
+          salesTaxApplicable: 19500,
+          furtherTax: 0,
+          extraTax: "",
+          fedPayable: 5000,
+          discount: 0,
+          totalValues: 124500,
+          fixedNotifiedValueOrRetailPrice: 0,
+          salesTaxWithheldAtSource: 0,
+          saleType: "Services",
+          sroScheduleNo: "",
+          sroItemSerialNo: "",
+        },
+      ],
+    },
   },
   {
     id: "SN012",
-    name: "Petroleum Sector — Placeholder",
-    description: "Petroleum sector goods. Fill in HS codes, FED rates, and SRO details once client business type is confirmed.",
+    name: "Petroleum Sector",
+    description: "Petroleum sector goods with standard tax and FED treatment.",
     category: "sector-specific",
-    isPlaceholder: true,
-    invoice: placeholderInvoice("SN012"),
+    isPlaceholder: false,
+    invoice: {
+      invoiceType: "Sale Invoice",
+      ...BASE_SELLER,
+      ...BASE_BUYER_REGISTERED,
+      scenarioId: "SN012",
+      items: [
+        {
+          hsCode: "2710.1210",
+          productDescription: "Test Petroleum Product",
+          rate: "18%",
+          uoM: "LITER",
+          quantity: 1000,
+          valueSalesExcludingST: 300000,
+          salesTaxApplicable: 54000,
+          furtherTax: 0,
+          extraTax: "",
+          fedPayable: 15000,
+          discount: 0,
+          totalValues: 369000,
+          fixedNotifiedValueOrRetailPrice: 0,
+          salesTaxWithheldAtSource: 0,
+          saleType: "Goods at standard rate (default)",
+          sroScheduleNo: "",
+          sroItemSerialNo: "",
+        },
+      ],
+    },
   },
 ];
 
@@ -469,8 +610,8 @@ export function getSandboxScenarios(): SandboxScenario[] {
   return SANDBOX_SCENARIOS;
 }
 
-export async function getSandboxStatus(): Promise<SandboxCompletionSummary> {
-  const results = await loadResults();
+export async function getSandboxStatus(companyId: string): Promise<SandboxCompletionSummary> {
+  const results = await loadResults(companyId);
 
   const scenarios: SandboxScenarioStatus[] = SANDBOX_SCENARIOS.map((scenario) => {
     if (scenario.isPlaceholder) {
@@ -521,6 +662,7 @@ export async function getSandboxStatus(): Promise<SandboxCompletionSummary> {
 
 // I8 — Run a single named scenario
 export async function runScenario(
+  companyId: string,
   scenarioId: string,
   options: SandboxRunOptions = {},
 ): Promise<SandboxRunResult> {
@@ -537,11 +679,11 @@ export async function runScenario(
     );
   }
 
-  return executeScenario(scenario, options);
+  return executeScenario(companyId, scenario, options);
 }
 
 // I8 — Run all (or a named subset of) non-placeholder scenarios
-export async function runScenarios(options: SandboxRunOptions = {}): Promise<SandboxBatchResult> {
+export async function runScenarios(companyId: string, options: SandboxRunOptions = {}): Promise<SandboxBatchResult> {
   const candidates = SANDBOX_SCENARIOS.filter((s) => {
     if (s.isPlaceholder) return false;
     return !options.scenarioIds || options.scenarioIds.includes(s.id);
@@ -554,7 +696,7 @@ export async function runScenarios(options: SandboxRunOptions = {}): Promise<San
   const results: SandboxRunResult[] = [];
 
   for (const scenario of candidates) {
-    results.push(await executeScenario(scenario, options));
+    results.push(await executeScenario(companyId, scenario, options));
   }
 
   return {
@@ -566,32 +708,175 @@ export async function runScenarios(options: SandboxRunOptions = {}): Promise<San
   };
 }
 
-export async function getAllSandboxResults(): Promise<Record<string, SandboxRunResult>> {
-  return loadResults();
+export async function getAllSandboxResults(companyId: string): Promise<Record<string, SandboxRunResult>> {
+  return loadResults(companyId);
 }
 
-export async function clearSandboxResults(): Promise<{ cleared: boolean }> {
-  await getCache().del(SANDBOX_RESULTS_CACHE_KEY);
-  return { cleared: true };
+export async function getSandboxPreflight(companyId: string): Promise<SandboxPreflightResult> {
+  const [settings, outboundIp, onboarding, companyProfile, sandboxStatus] = await Promise.all([
+    getPublicFbrSettings(companyId, false),
+    getOutboundIp(),
+    prisma.fbrOnboarding.findUnique({ where: { companyId } }),
+    prisma.companyProfile.findUnique({ where: { companyId } }),
+    getSandboxStatus(companyId),
+  ]);
+
+  const sandboxTokenConfigured = settings.tokens.sandbox.configured;
+  const isSandboxEnvironment = settings.environment === "sandbox";
+  const liveModeEnabled = !settings.useMock;
+  const ipWhitelistApproved = onboarding?.ipWhitelistStatus === "APPROVED";
+  const outboundIpAvailable = Boolean(outboundIp.publicIp);
+  const profileMissing = requiredProfileFields(companyProfile);
+  const onboardingMissing = requiredOnboardingFields(onboarding);
+  const fixturesReady = sandboxStatus.ready === 13 && sandboxStatus.placeholder === 0;
+
+  const checks: SandboxPreflightCheck[] = [
+    {
+      id: "environment",
+      label: "Sandbox environment selected",
+      passed: isSandboxEnvironment,
+      severity: isSandboxEnvironment ? "success" : "danger",
+      message: isSandboxEnvironment
+        ? "FBR calls are set to sandbox."
+        : "FBR environment is not set to sandbox.",
+      action: "Set FBR environment to sandbox in Settings before running PRAL scenarios.",
+    },
+    {
+      id: "mock-mode",
+      label: "Live mode enabled",
+      passed: liveModeEnabled,
+      severity: liveModeEnabled ? "success" : "danger",
+      message: liveModeEnabled
+        ? "Mock mode is disabled, so live FBR validation can be attempted."
+        : "Mock mode is still enabled. Runs will not reach FBR.",
+      action: "Disable mock mode in FBR Settings when sandbox credentials are available.",
+    },
+    {
+      id: "sandbox-token",
+      label: "Sandbox token configured",
+      passed: sandboxTokenConfigured,
+      severity: sandboxTokenConfigured ? "success" : "danger",
+      message: sandboxTokenConfigured
+        ? "A sandbox token is stored for this company."
+        : "No company sandbox token is configured.",
+      action: "Add the company sandbox token in FBR Settings.",
+    },
+    {
+      id: "outbound-ip",
+      label: "Outbound IP detected",
+      passed: outboundIpAvailable,
+      severity: outboundIpAvailable ? "success" : "warning",
+      message: outboundIpAvailable
+        ? `Outbound IP detected: ${outboundIp.publicIp}.`
+        : "The server outbound IP could not be detected automatically.",
+      action: "Set FBR_OUTBOUND_IP or run from the deployment server before sharing the IP with FBR/PRAL.",
+    },
+    {
+      id: "ip-whitelist",
+      label: "IP whitelist approved",
+      passed: ipWhitelistApproved,
+      severity: ipWhitelistApproved ? "success" : "danger",
+      message: ipWhitelistApproved
+        ? "Onboarding shows the FBR/PRAL IP whitelist as approved."
+        : "Onboarding does not show IP whitelist approval yet.",
+      action: "Update onboarding after FBR/PRAL confirms the outbound IP is whitelisted.",
+    },
+    {
+      id: "company-profile",
+      label: "Company seller profile complete",
+      passed: profileMissing.length === 0,
+      severity: profileMissing.length === 0 ? "success" : "warning",
+      message: profileMissing.length === 0
+        ? "Company seller profile has the required invoice identity fields."
+        : `Missing profile fields: ${profileMissing.join(", ")}.`,
+      action: "Complete company name, NTN/CNIC, business type, province, address, phone, and email in Company Profile.",
+    },
+    {
+      id: "onboarding-profile",
+      label: "Onboarding contact details complete",
+      passed: onboardingMissing.length === 0,
+      severity: onboardingMissing.length === 0 ? "success" : "warning",
+      message: onboardingMissing.length === 0
+        ? "Business nature, sector, and technical contact details are filled."
+        : `Missing onboarding fields: ${onboardingMissing.join(", ")}.`,
+      action: "Complete business nature, primary sector, and technical contact details in Onboarding.",
+    },
+    {
+      id: "scenario-fixtures",
+      label: "Required scenario fixtures ready",
+      passed: fixturesReady,
+      severity: fixturesReady ? "success" : "danger",
+      message: fixturesReady
+        ? `${sandboxStatus.ready} required scenarios are ready and no placeholders remain.`
+        : `${sandboxStatus.ready} scenarios are ready and ${sandboxStatus.placeholder} placeholders remain.`,
+      action: "Complete all required scenario fixtures before live sandbox certification.",
+    },
+  ];
+
+  const blockingIssues = checks.filter((check) => !check.passed && check.severity === "danger").length;
+  const warningIssues = checks.filter((check) => !check.passed && check.severity === "warning").length;
+  const passedChecks = checks.filter((check) => check.passed).length;
+
+  return {
+    readyForLive: blockingIssues === 0,
+    canRunMock: fixturesReady,
+    canRunLive: blockingIssues === 0,
+    generatedAt: new Date().toISOString(),
+    environment: settings.environment,
+    useMock: settings.useMock,
+    outboundIp,
+    summary: {
+      totalChecks: checks.length,
+      passedChecks,
+      blockingIssues,
+      warningIssues,
+    },
+    checks,
+  };
+}
+
+export async function clearSandboxResults(companyId: string): Promise<{ cleared: boolean; count: number }> {
+  const deleted = await prisma.sandboxResult.deleteMany({ where: { companyId } });
+  return { cleared: true, count: deleted.count };
 }
 
 // ─── Private ──────────────────────────────────────────────────────────────────
 
 async function executeScenario(
+  companyId: string,
   scenario: SandboxScenario,
   options: SandboxRunOptions,
 ): Promise<SandboxRunResult> {
   const operation = options.operation ?? "validate";
   const settings: FbrInvoiceSettings = { environment: "sandbox", ...(options.settings ?? {}) };
+  const runtimeSettings = await getRuntimeFbrSettings(companyId, settings);
+  const runMode = runtimeSettings.useMock ? "mock" : "live";
   const start = Date.now();
+  const existingOnboarding = await prisma.fbrOnboarding.findUnique({ where: { companyId } });
+  await prisma.fbrOnboarding.upsert({
+    where: { companyId },
+    create: {
+      companyId,
+      status: "SANDBOX_TESTING",
+      sandboxStatus: "IN_PROGRESS",
+      sandboxStartedAt: new Date(start),
+    },
+    update: {
+      status: "SANDBOX_TESTING",
+      sandboxStatus: "IN_PROGRESS",
+      sandboxStartedAt: existingOnboarding?.sandboxStartedAt ?? new Date(start),
+    },
+  });
 
   let result: SandboxRunResult;
+  let payloadForStorage: FbrInvoiceInput = scenario.invoice;
 
   try {
     const fbrResult =
       operation === "submit"
-        ? await submitInvoiceToFbr(scenario.invoice, settings)
-        : await validateInvoiceWithFbr(scenario.invoice, settings);
+        ? await submitInvoiceToFbr(companyId, scenario.invoice, settings)
+        : await validateInvoiceWithFbr(companyId, scenario.invoice, settings);
+    payloadForStorage = fbrResult.payload;
 
     result = {
       scenarioId: scenario.id,
@@ -603,49 +888,238 @@ async function executeScenario(
       runAt: new Date().toISOString(),
       durationMs: Date.now() - start,
       operationType: operation,
-      raw: fbrResult.raw,
+      runMode,
+      payload: maskSensitive(fbrResult.payload),
+      mappedErrors: mapSandboxErrors(fbrResult.errors, fbrResult.raw),
+      raw: maskSensitive(fbrResult.raw),
     };
   } catch (error) {
     const err = error as Error & { status?: number; code?: string };
+    const transportErrors = [{ message: err.message, code: err.code, status: err.status }];
     result = {
       scenarioId: scenario.id,
       scenarioName: scenario.name,
       passed: false,
       statusCode: "ERR",
       invoiceNumber: "",
-      errors: [{ message: err.message, code: err.code, status: err.status }],
+      errors: transportErrors,
       runAt: new Date().toISOString(),
       durationMs: Date.now() - start,
       operationType: operation,
+      runMode,
+      payload: maskSensitive(scenario.invoice),
+      mappedErrors: mapSandboxErrors(transportErrors, { error: err.message, code: err.code }),
       raw: { error: err.message, code: err.code },
     };
   }
 
-  await saveResult(result);
-  await logToFile(result);
+  await saveResult(companyId, payloadForStorage, result);
+  await logToFile(companyId, result);
   return result;
 }
 
-async function saveResult(result: SandboxRunResult): Promise<void> {
-  const all = await loadResults();
-  all[result.scenarioId] = result;
-  await getCache().set(SANDBOX_RESULTS_CACHE_KEY, JSON.stringify(all));
+async function saveResult(companyId: string, payload: FbrInvoiceInput, result: SandboxRunResult): Promise<void> {
+  await prisma.sandboxResult.create({
+    data: {
+      companyId,
+      scenarioId: result.scenarioId,
+      scenarioName: result.scenarioName,
+      operation: result.operationType === "submit" ? "SUBMIT" : "VALIDATE",
+      status: result.passed ? "PASSED" : "FAILED",
+      statusCode: result.statusCode,
+      invoiceNumber: result.invoiceNumber || null,
+      payload: toJson(payload),
+      response: toJson(result),
+      errors: toJson(result.errors),
+      durationMs: result.durationMs,
+      runAt: new Date(result.runAt),
+      passedAt: result.passed ? new Date(result.runAt) : null,
+    },
+  });
+  const results = await loadResults(companyId);
+  const requiredScenarioIds = SANDBOX_SCENARIOS
+    .filter((scenario) => !scenario.isPlaceholder)
+    .map((scenario) => scenario.id);
+  const allPassed = requiredScenarioIds.every((scenarioId) => results[scenarioId]?.passed === true);
+  await prisma.fbrOnboarding.update({
+    where: { companyId },
+    data: {
+      sandboxStatus: allPassed ? "PASSED" : "IN_PROGRESS",
+      status: allPassed ? "CLIENT_TESTING" : "SANDBOX_TESTING",
+      ...(allPassed ? { sandboxCompletedAt: new Date() } : {}),
+    },
+  });
 }
 
-async function loadResults(): Promise<Record<string, SandboxRunResult>> {
-  const cached = await getCache().get(SANDBOX_RESULTS_CACHE_KEY);
-  return cached ? (JSON.parse(cached) as Record<string, SandboxRunResult>) : {};
+async function loadResults(companyId: string): Promise<Record<string, SandboxRunResult>> {
+  const records = await prisma.sandboxResult.findMany({
+    where: { companyId },
+    orderBy: [{ runAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      scenarioId: true,
+      operation: true,
+      payload: true,
+      response: true,
+      errors: true,
+    },
+  });
+  const results: Record<string, SandboxRunResult> = {};
+  for (const record of records) {
+    if (!results[record.scenarioId] && record.response) {
+      const response = record.response as unknown as Partial<SandboxRunResult>;
+      const rawErrors = Array.isArray(response.errors)
+        ? response.errors
+        : Array.isArray(record.errors)
+          ? record.errors
+          : [];
+      results[record.scenarioId] = {
+        ...response,
+        operationType: response.operationType ?? (record.operation === "SUBMIT" ? "submit" : "validate"),
+        runMode: response.runMode ?? inferRunMode(response),
+        payload: maskSensitive(response.payload ?? record.payload),
+        mappedErrors: response.mappedErrors?.length
+          ? response.mappedErrors
+          : mapSandboxErrors(rawErrors, response.raw),
+        raw: maskSensitive(response.raw),
+      } as SandboxRunResult;
+    }
+  }
+  return results;
 }
 
-async function logToFile(result: SandboxRunResult): Promise<void> {
+async function logToFile(companyId: string, result: SandboxRunResult): Promise<void> {
   const logPath =
     process.env.FBR_SANDBOX_LOG_PATH ?? join(process.cwd(), ".data", "sandbox-results.log");
   await mkdir(dirname(logPath), { recursive: true });
-  await appendFile(logPath, `${JSON.stringify(result)}\n`, "utf8");
+  await appendFile(logPath, `${JSON.stringify({ companyId, ...result })}\n`, "utf8");
+}
+
+function toJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
 function httpError(status: number, message: string): Error & { status?: number } {
   const error = new Error(message) as Error & { status?: number };
   error.status = status;
   return error;
+}
+
+function mapSandboxErrors(errors: unknown[], raw: unknown): SandboxErrorDetail[] {
+  const candidates = errors.length > 0 ? errors : extractRawErrors(raw);
+
+  return candidates.map((error) => {
+    const value = asRecord(error);
+    const normalized = value as Partial<NormalizedFbrError> & { code?: string; status?: number };
+    const code = String(normalized.errorCode ?? normalized.code ?? "UNKNOWN");
+    const fbrMessage = String(normalized.fbrMessage ?? normalized.message ?? "FBR request failed.");
+    const definition = getFbrErrorDefinition(code, "sales", fbrMessage);
+
+    return {
+      code,
+      field: normalized.field || transportField(code),
+      scope: normalized.scope || "general",
+      ...(typeof normalized.itemIndex === "number" ? { itemIndex: normalized.itemIndex } : {}),
+      fbrMessage,
+      fixHint: normalized.userMessage || transportHint(code, definition.message),
+    };
+  });
+}
+
+function transportHint(code: string, fallback: string): string {
+  const hints: Record<string, string> = {
+    FBR_TOKEN_MISSING: "Add the company sandbox token in Settings, then retry in Live FBR mode.",
+    FBR_TOKEN_INVALID: "Replace the sandbox token in Settings and verify it before retrying.",
+    FBR_REQUEST_FAILED: "Confirm internet access, FBR availability, and IP whitelist approval before retrying.",
+    ECONNREFUSED: "Confirm the FBR endpoint is reachable from this server and the outbound IP is whitelisted.",
+    ETIMEDOUT: "Retry after checking FBR connectivity and the server outbound network route.",
+  };
+  return hints[code] || fallback;
+}
+
+function transportField(code: string): string {
+  if (code.includes("TOKEN")) return "sandboxToken";
+  if (code.includes("TIME") || code.includes("CONN") || code.includes("REQUEST")) return "connection";
+  return "invoice";
+}
+
+function extractRawErrors(raw: unknown): unknown[] {
+  const value = asRecord(raw);
+  if (value.error || value.message || value.errorCode || value.code) {
+    return [{
+      errorCode: value.errorCode ?? value.code,
+      message: value.error ?? value.message,
+    }];
+  }
+  return [];
+}
+
+function inferRunMode(response: Partial<SandboxRunResult>): "mock" | "live" {
+  const invoiceNumber = String(response.invoiceNumber ?? "").toUpperCase();
+  return invoiceNumber.startsWith("MOCK") ? "mock" : "live";
+}
+
+function maskSensitive(value: unknown, key = ""): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => maskSensitive(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [
+        entryKey,
+        maskSensitive(entryValue, entryKey),
+      ]),
+    );
+  }
+
+  const normalizedKey = key.toLowerCase();
+  if (/(token|authorization|password|secret)/.test(normalizedKey)) return "[masked]";
+  if (/(ntn|cnic)/.test(normalizedKey)) return maskIdentifier(value);
+  if (/(address|phone|mobile)/.test(normalizedKey)) return value ? "[masked]" : value;
+  if (/email/.test(normalizedKey)) return maskEmail(value);
+  return value;
+}
+
+function maskIdentifier(value: unknown): unknown {
+  const text = String(value ?? "");
+  if (!text) return value;
+  return `****${text.replace(/\s/g, "").slice(-4)}`;
+}
+
+function maskEmail(value: unknown): unknown {
+  const text = String(value ?? "");
+  const [, domain] = text.split("@");
+  return domain ? `***@${domain}` : text ? "[masked]" : value;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function requiredProfileFields(profile: Awaited<ReturnType<typeof prisma.companyProfile.findUnique>>): string[] {
+  return [
+    ["company name", profile?.companyName],
+    ["NTN/CNIC", profile?.ntnOrCnic],
+    ["business type", profile?.businessType],
+    ["province", profile?.province],
+    ["address", profile?.address],
+    ["phone", profile?.phoneNumber],
+    ["email", profile?.emailAddress],
+  ]
+    .filter(([, value]) => !String(value ?? "").trim())
+    .map(([label]) => String(label));
+}
+
+function requiredOnboardingFields(onboarding: Awaited<ReturnType<typeof prisma.fbrOnboarding.findUnique>>): string[] {
+  return [
+    ["business nature", onboarding?.businessNature],
+    ["primary sector", onboarding?.primarySector],
+    ["technical contact name", onboarding?.technicalContactName],
+    ["technical contact mobile", onboarding?.technicalContactMobile],
+    ["technical contact email", onboarding?.technicalContactEmail],
+  ]
+    .filter(([, value]) => !String(value ?? "").trim())
+    .map(([label]) => String(label));
 }

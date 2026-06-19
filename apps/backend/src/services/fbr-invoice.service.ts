@@ -160,58 +160,61 @@ export function formatInvoiceForFbr(
 }
 
 export async function validateInvoiceWithFbr(
+  companyId: string,
   invoice: FbrInvoiceInput,
   settings: FbrInvoiceSettings = {},
 ): Promise<FbrOperationResult> {
-  const config = await resolveConfig(settings);
+  const config = await resolveConfig(companyId, settings);
   const payload = formatInvoiceForFbr(invoice, config.environment);
 
   if (config.useMock) {
     const result = makeMockResult("validate", payload, config);
-    await auditIfInvalid(result);
+    await auditIfInvalid(companyId, result);
     return result;
   }
 
   try {
     const raw = await postToFbr(validatePath(config.environment), payload, config.token);
     const result = normalizeFbrResponse("validate", payload, raw, config.environment);
-    await auditIfInvalid(result);
+    await auditIfInvalid(companyId, result);
     return result;
   } catch (error) {
-    await auditTransportError("validate", payload, error);
+    await auditTransportError(companyId, "validate", payload, error);
     throw error;
   }
 }
 
 export async function submitInvoiceToFbr(
+  companyId: string,
   invoice: FbrInvoiceInput,
   settings: FbrInvoiceSettings = {},
 ): Promise<FbrOperationResult> {
-  const config = await resolveConfig(settings);
+  const config = await resolveConfig(companyId, settings);
   const payload = formatInvoiceForFbr(invoice, config.environment);
 
   if (config.useMock) {
     const result = makeMockResult("submit", payload, config);
-    await auditIfInvalid(result);
+    await auditIfInvalid(companyId, result);
     return result;
   }
 
   try {
     const raw = await postToFbr("/di_data/v1/di/postinvoicedata", payload, config.token);
     const result = normalizeFbrResponse("submit", payload, raw, config.environment);
-    await auditIfInvalid(result);
+    await auditIfInvalid(companyId, result);
     return result;
   } catch (error) {
-    await auditTransportError("submit", payload, error);
+    await auditTransportError(companyId, "submit", payload, error);
     throw error;
   }
 }
 
 export async function previewFormattedInvoice(
+  companyId: string,
   invoice: FbrInvoiceInput,
   settings: FbrInvoiceSettings = {},
 ): Promise<FbrOperationResult> {
-  const config = await resolveConfig(settings);
+  const config = await resolveConfig(companyId, settings);
   const payload = formatInvoiceForFbr(invoice, config.environment);
 
   return {
@@ -236,10 +239,11 @@ export async function previewFormattedInvoice(
 }
 
 export async function lookupReferenceInvoice(
+  companyId: string,
   invoiceRefNo: unknown,
   settings: FbrInvoiceSettings = {},
 ): Promise<ReferenceInvoiceLookupResult> {
-  const config = await resolveConfig(settings);
+  const config = await resolveConfig(companyId, settings);
   const referenceNo = stringValue(invoiceRefNo);
 
   if (!referenceNo) {
@@ -298,8 +302,8 @@ export async function lookupReferenceInvoice(
   };
 }
 
-async function resolveConfig(settings: FbrInvoiceSettings): Promise<FbrRequestConfig> {
-  const runtimeSettings = await getRuntimeFbrSettings(settings);
+async function resolveConfig(companyId: string, settings: FbrInvoiceSettings): Promise<FbrRequestConfig> {
+  const runtimeSettings = await getRuntimeFbrSettings(companyId, settings);
   const environment = runtimeSettings.environment;
   const useMock = runtimeSettings.useMock;
   const mockStatus = stringValue(settings.mockStatus, "valid") === "invalid" ? "invalid" : "valid";
@@ -489,12 +493,13 @@ function buildHeaderError(root: RawRecord, validation: RawRecord, statusCode: st
   });
 }
 
-async function auditIfInvalid(result: FbrOperationResult): Promise<void> {
+async function auditIfInvalid(companyId: string, result: FbrOperationResult): Promise<void> {
   if (result.errors.length === 0) {
     return;
   }
 
   await logFbrErrorAudit({
+    companyId,
     operation: result.endpoint,
     statusCode: result.statusCode,
     invoiceSnapshot: result.payload,
@@ -503,7 +508,7 @@ async function auditIfInvalid(result: FbrOperationResult): Promise<void> {
   });
 }
 
-async function auditTransportError(operation: string, payload: FbrInvoicePayload, error: unknown): Promise<void> {
+async function auditTransportError(companyId: string, operation: string, payload: FbrInvoicePayload, error: unknown): Promise<void> {
   const err = error as Error & { code?: string; details?: string };
   const normalized = normalizeFbrError({
     scope: "header",
@@ -513,6 +518,7 @@ async function auditTransportError(operation: string, payload: FbrInvoicePayload
   });
 
   await logFbrErrorAudit({
+    companyId,
     operation,
     invoiceSnapshot: payload,
     errors: [normalized],

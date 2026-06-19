@@ -6,12 +6,14 @@ import type { FbrInvoiceInput, FbrInvoiceItemInput, FbrOperationResult } from ".
 type FbrPayloadItem = FbrOperationResult["payload"]["items"][number];
 
 export async function saveNormalizedInvoiceRecord(
+  companyId: string,
   _invoice: FbrInvoiceInput,
   result: FbrOperationResult,
 ) {
   const payload = result.payload;
   const created = await prisma.invoice.create({
     data: {
+      companyId,
       fbrInvoiceNumber: optionalString(result.invoiceNumber),
       invoiceType: payload.invoiceType,
       invoiceDate: parseInvoiceDate(payload.invoiceDate),
@@ -51,6 +53,7 @@ export async function saveNormalizedInvoiceRecord(
 }
 
 export async function saveFailedInvoiceRecord(
+  companyId: string,
   invoice: FbrInvoiceInput,
   error: Error & { status?: number; code?: string; details?: string; rawResponse?: unknown },
 ) {
@@ -68,6 +71,7 @@ export async function saveFailedInvoiceRecord(
 
   const created = await prisma.invoice.create({
     data: {
+      companyId,
       invoiceType: stringValue(invoice.invoiceType, "Sale Invoice"),
       invoiceDate: parseInvoiceDate(stringValue(invoice.invoiceDate)),
       invoiceRefNo: optionalString(invoice.invoiceRefNo),
@@ -143,9 +147,9 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
 }
 
-export async function getInvoiceById(id: string) {
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
+export async function getInvoiceById(companyId: string, id: string) {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, companyId },
     include: { items: true },
   });
 

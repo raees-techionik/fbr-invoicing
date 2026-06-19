@@ -1,4 +1,5 @@
 import axios from "axios";
+import { applyAuthContext } from "./companySession";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:3000";
 
@@ -6,11 +7,7 @@ const productMappingsApi = axios.create({
   baseURL: `${API_BASE_URL}/api/products`,
 });
 
-productMappingsApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+productMappingsApi.interceptors.request.use(applyAuthContext);
 
 export async function getProductMappings({ search = "", status = "", limit = 250 } = {}) {
   const response = await productMappingsApi.get("/", {

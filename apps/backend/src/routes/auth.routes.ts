@@ -78,6 +78,12 @@ authRouter.post("/login", async (req, res, next) => {
  *     summary: Current user and companies
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: X-Company-Id
+ *         required: false
+ *         schema: { type: string }
+ *         description: Company to activate. Defaults to the user's default membership.
  *     responses:
  *       200:
  *         description: OK
@@ -87,7 +93,7 @@ authRouter.post("/login", async (req, res, next) => {
 authRouter.get("/me", requireAuth, async (req, res, next) => {
   try {
     const profile = await getProfile(req.auth!.userId);
-    res.json(profile);
+    res.json({ ...profile, activeCompany: req.activeCompany });
   } catch (e) {
     next(e);
   }

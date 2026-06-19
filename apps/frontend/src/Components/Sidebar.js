@@ -18,6 +18,9 @@ import {
 } from 'react-icons/fi';
 import { MdBiotech, MdLogout, MdOutlineWifiOff, MdPeopleAlt } from 'react-icons/md';
 import { TbLayoutSidebarLeftCollapseFilled, TbLayoutSidebarLeftExpandFilled } from 'react-icons/tb';
+import { FiCheckSquare } from 'react-icons/fi';
+import CompanySwitcher from './CompanySwitcher';
+import { clearCompanySession } from '../services/companySession';
 
 const SIDEBAR_OVERLAY_BREAKPOINT = 900;
 
@@ -39,6 +42,7 @@ function Sidebar({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) {
       ],
     },
     { name: 'Company', path: '/company-profile', icon: <FiUser /> },
+    { name: 'Onboarding', path: '/onboarding', icon: <FiCheckSquare /> },
     { name: 'Customers', path: '/customers', icon: <FiUsers /> },
     { name: 'Services', path: '/services', icon: <FiSettings /> },
     { name: 'Products', path: '/products', icon: <BsBox /> },
@@ -67,6 +71,7 @@ function Sidebar({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) {
   const logout = () => {
     localStorage.removeItem('email');
     localStorage.removeItem('token');
+    clearCompanySession();
     navigate('/');
   };
 
@@ -100,6 +105,8 @@ function Sidebar({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) {
           </>
         )}
       </NavLink>
+
+      <CompanySwitcher isCollapsed={isCollapsed} />
 
       <nav className="app-sidebar__nav" aria-label="Main navigation">
         {menuItems.map((item, index) => (

@@ -32,13 +32,14 @@ function toDto(record: {
   };
 }
 
-export async function listStaff(params: { search?: string; limit?: number } = {}) {
+export async function listStaff(companyId: string, params: { search?: string; limit?: number } = {}) {
   const search = params.search?.trim() || "";
   const take = Math.min(Math.max(Number(params.limit) || 100, 1), 250);
 
   const records = await prisma.staffMember.findMany({
     where: search
       ? {
+          companyId,
           OR: [
             { memberName: { contains: search, mode: "insensitive" } },
             { designation: { contains: search, mode: "insensitive" } },
@@ -48,7 +49,7 @@ export async function listStaff(params: { search?: string; limit?: number } = {}
             { province: { contains: search, mode: "insensitive" } },
           ],
         }
-      : {},
+      : { companyId },
     orderBy: { createdAt: "desc" },
     take,
   });
@@ -56,15 +57,16 @@ export async function listStaff(params: { search?: string; limit?: number } = {}
   return records.map(toDto);
 }
 
-export async function getStaffMember(id: string) {
-  const record = await prisma.staffMember.findUnique({ where: { id } });
+export async function getStaffMember(companyId: string, id: string) {
+  const record = await prisma.staffMember.findFirst({ where: { id, companyId } });
   if (!record) throw httpError(404, "Staff member not found.");
   return toDto(record);
 }
 
-export async function createStaffMember(body: Record<string, unknown>) {
+export async function createStaffMember(companyId: string, body: Record<string, unknown>) {
   const record = await prisma.staffMember.create({
     data: {
+      companyId,
       memberName: String(body.member_name || ""),
       designation: String(body.designation || ""),
       cnicNtn: String(body.cnic_ntn || ""),
@@ -77,12 +79,12 @@ export async function createStaffMember(body: Record<string, unknown>) {
   return toDto(record);
 }
 
-export async function updateStaffMember(id: string, body: Record<string, unknown>) {
-  const existing = await prisma.staffMember.findUnique({ where: { id } });
+export async function updateStaffMember(companyId: string, id: string, body: Record<string, unknown>) {
+  const existing = await prisma.staffMember.findFirst({ where: { id, companyId } });
   if (!existing) throw httpError(404, "Staff member not found.");
 
   const record = await prisma.staffMember.update({
-    where: { id },
+    where: { id, companyId },
     data: {
       memberName: String(body.member_name ?? existing.memberName),
       designation: String(body.designation ?? existing.designation),
@@ -96,9 +98,9 @@ export async function updateStaffMember(id: string, body: Record<string, unknown
   return toDto(record);
 }
 
-export async function deleteStaffMember(id: string) {
-  const existing = await prisma.staffMember.findUnique({ where: { id } });
+export async function deleteStaffMember(companyId: string, id: string) {
+  const existing = await prisma.staffMember.findFirst({ where: { id, companyId } });
   if (!existing) throw httpError(404, "Staff member not found.");
-  await prisma.staffMember.delete({ where: { id } });
+  await prisma.staffMember.delete({ where: { id, companyId } });
   return { id, deleted: true };
 }

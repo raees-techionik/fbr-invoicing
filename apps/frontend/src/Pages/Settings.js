@@ -14,6 +14,7 @@ import {
   FiX,
   FiXCircle,
 } from "react-icons/fi";
+import { Link } from "react-router-dom";
 import {
   getFbrOutboundIp,
   getFbrSettings,
@@ -21,6 +22,7 @@ import {
   getFbrTokenStatusSummary,
   updateFbrSettings,
 } from "../services/fbrSettingsApi";
+import { getSandboxPreflight } from "../services/fbrSandboxApi";
 import useBlockBackButton from "../Components/useBlockBackButton";
 import "./Settings.css";
 
@@ -74,6 +76,7 @@ function Settings() {
 
   const [settings, setSettings] = useState(null);
   const [outboundIp, setOutboundIp] = useState(null);
+  const [preflight, setPreflight] = useState(null);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     environment: "sandbox",
@@ -95,10 +98,11 @@ function Settings() {
     setError("");
 
     try {
-      const [settingsRes, tokenStatusRes, ipRes] = await Promise.all([
+      const [settingsRes, tokenStatusRes, ipRes, preflightRes] = await Promise.all([
         getFbrSettings({ checkLive }),
         getFbrTokenStatusSummary({ checkLive }),
         getFbrOutboundIp(),
+        getSandboxPreflight(),
       ]);
 
       setSettings({
@@ -110,6 +114,7 @@ function Settings() {
         },
       });
       setOutboundIp(ipRes);
+      setPreflight(preflightRes);
       setFormData((prev) => ({
         ...prev,
         environment: settingsRes.environment,
@@ -196,6 +201,7 @@ function Settings() {
       }));
       setMessage("Settings saved successfully through /api/token.");
       await refreshTokenStatus({ checkLive: false, showMessage: false });
+      setPreflight(await getSandboxPreflight());
     } catch (err) {
       setError(err.response?.data?.error || "Failed to save settings.");
     } finally {
@@ -242,6 +248,11 @@ function Settings() {
   const selectedToken = formData.environment === "sandbox" ? settings?.tokens?.sandbox : settings?.tokens?.production;
   const environmentLabel = formData.environment === "production" ? "Production" : "Sandbox";
   const savedEnvironmentLabel = settings?.environment === "production" ? "Production" : "Sandbox";
+  const liveSandboxReady = Boolean(preflight?.canRunLive);
+  const blockingChecks = preflight?.checks?.filter((check) => !check.passed && check.severity === "danger") || [];
+  const warningChecks = preflight?.checks?.filter((check) => !check.passed && check.severity === "warning") || [];
+  const sandboxTokenConfigured = Boolean(settings?.tokens?.sandbox?.configured);
+  const productionTokenConfigured = Boolean(settings?.tokens?.production?.configured);
 
   return (
     <div className="settings-page">
@@ -305,10 +316,67 @@ function Settings() {
               <small>{selectedToken?.masked || `${environmentLabel} token required`}</small>
             </article>
             <article>
+              <span>Live Sandbox</span>
+              <strong className={liveSandboxReady ? "success" : "danger"}>{liveSandboxReady ? "Ready" : "Blocked"}</strong>
+              <small>{preflight ? `${preflight.summary.blockingIssues} blocking issue${preflight.summary.blockingIssues === 1 ? "" : "s"}` : "Preflight pending"}</small>
+            </article>
+            <article>
               <span>Outbound IP</span>
               <strong>{outboundIp?.publicIp || "Unavailable"}</strong>
               <small>{outboundIp?.source || "Whitelist status unknown"}</small>
             </article>
+          </section>
+
+          <section className={`settings-panel settings-readiness-panel ${liveSandboxReady ? "ready" : "blocked"}`}>
+            <div className="settings-panel__top">
+              <div>
+                <h2>Live Sandbox Readiness</h2>
+                <p>
+                  {liveSandboxReady
+                    ? "This company can attempt live FBR sandbox validation from the Sandbox page."
+                    : "Complete the blocking items before trying real FBR sandbox validation."}
+                </p>
+              </div>
+              <span className={`settings-readiness-score ${liveSandboxReady ? "success" : "danger"}`}>
+                {preflight ? `${preflight.summary.passedChecks}/${preflight.summary.totalChecks}` : "0/0"} ready
+              </span>
+            </div>
+
+            <div className="settings-readiness-steps">
+              <article className={settings?.environment === "sandbox" ? "success" : "danger"}>
+                <strong>1. Use sandbox environment</strong>
+                <span>{settings?.environment === "sandbox" ? "Sandbox is selected." : "Switch environment to Sandbox."}</span>
+              </article>
+              <article className={!settings?.useMock ? "success" : "danger"}>
+                <strong>2. Disable mock mode</strong>
+                <span>{settings?.useMock ? "Mock mode is still on, so FBR will be bypassed." : "Live FBR calls are enabled."}</span>
+              </article>
+              <article className={sandboxTokenConfigured ? "success" : "danger"}>
+                <strong>3. Add sandbox token</strong>
+                <span>{sandboxTokenConfigured ? "Sandbox token is stored for this company." : "Paste the FBR sandbox token below."}</span>
+              </article>
+              <article className={preflight?.checks?.find((check) => check.id === "ip-whitelist")?.passed ? "success" : "danger"}>
+                <strong>4. Whitelist outbound IP</strong>
+                <span>{outboundIp?.publicIp ? `Send ${outboundIp.publicIp} to FBR/PRAL.` : "Outbound IP is unavailable."}</span>
+              </article>
+            </div>
+
+            {(blockingChecks.length > 0 || warningChecks.length > 0) && (
+              <div className="settings-readiness-issues">
+                {blockingChecks.map((check) => (
+                  <div key={check.id} className="danger">
+                    <FiXCircle size={16} />
+                    <span><strong>{check.label}</strong>{check.action}</span>
+                  </div>
+                ))}
+                {warningChecks.map((check) => (
+                  <div key={check.id} className="warning">
+                    <FiAlertTriangle size={16} />
+                    <span><strong>{check.label}</strong>{check.action}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="settings-workspace">
@@ -377,6 +445,13 @@ function Settings() {
                     <small>{formData.useMock ? "FBR is bypassed for generated invoice numbers." : "A valid token is required for submissions."}</small>
                   </span>
                 </label>
+
+                {formData.useMock && (
+                  <div className="settings-inline-warning">
+                    <FiAlertTriangle size={17} />
+                    <span>Mock mode is safe for demos and local testing, but live sandbox certification requires this to be off.</span>
+                  </div>
+                )}
               </div>
 
               <div className="settings-token-grid">
@@ -385,6 +460,7 @@ function Settings() {
                     <div>
                       <span>Sandbox Token</span>
                       <strong>{settings?.tokens?.sandbox?.configured ? settings.tokens.sandbox.masked : "Not configured"}</strong>
+                      <small>Required for PRAL/FBR sandbox certification and the 13 live scenarios.</small>
                     </div>
                     <StatusBadge status={sandboxStatus?.status} />
                   </div>
@@ -419,6 +495,7 @@ function Settings() {
                     <div>
                       <span>Production Token</span>
                       <strong>{settings?.tokens?.production?.configured ? settings.tokens.production.masked : "Not configured"}</strong>
+                      <small>Needed only after sandbox scenarios pass and FBR issues production access.</small>
                     </div>
                     <StatusBadge status={productionStatus?.status} />
                   </div>
@@ -463,6 +540,10 @@ function Settings() {
                   {checking ? <Spinner /> : <FiActivity size={16} />}
                   Verify {environmentLabel}
                 </button>
+                <Link className="settings-secondary-action" to="/sandbox">
+                  <FiShield size={16} />
+                  Open Sandbox
+                </Link>
               </div>
             </form>
 
@@ -528,11 +609,11 @@ function Settings() {
                   </div>
                   <div>
                     <span>Sandbox token</span>
-                    <strong>{settings?.tokens?.sandbox?.configured ? "Configured" : "Missing"}</strong>
+                    <strong className={sandboxTokenConfigured ? "success-text" : "danger-text"}>{sandboxTokenConfigured ? "Configured" : "Missing"}</strong>
                   </div>
                   <div>
                     <span>Production token</span>
-                    <strong>{settings?.tokens?.production?.configured ? "Configured" : "Missing"}</strong>
+                    <strong className={productionTokenConfigured ? "success-text" : "warning-text"}>{productionTokenConfigured ? "Configured" : "Not needed yet"}</strong>
                   </div>
                   <div>
                     <span>Last saved</span>

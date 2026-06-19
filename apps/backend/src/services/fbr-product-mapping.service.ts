@@ -44,7 +44,7 @@ interface ResolveHsFieldsParams {
 
 const productMappingInputSchema = z.object({}).passthrough();
 
-export async function listProductMappings(params: ListProductMappingsParams = {}) {
+export async function listProductMappings(companyId: string, params: ListProductMappingsParams = {}) {
   const search = stringValue(params.search);
   const status = stringValue(params.status);
   const take = Math.min(Math.max(Number(params.limit) || 100, 1), 250);
@@ -52,6 +52,7 @@ export async function listProductMappings(params: ListProductMappingsParams = {}
 
   const records = await prisma.product.findMany({
     where: {
+      companyId,
       ...(isActive === undefined ? {} : { isActive }),
       ...(search
         ? {
@@ -71,8 +72,8 @@ export async function listProductMappings(params: ListProductMappingsParams = {}
   return records.map((record) => toProductMappingDto(fromProductRecord(record)));
 }
 
-export async function getProductMapping(id: string) {
-  const record = await prisma.product.findUnique({ where: { id } });
+export async function getProductMapping(companyId: string, id: string) {
+  const record = await prisma.product.findFirst({ where: { id, companyId } });
 
   if (!record) {
     throw httpError(404, "Product not found.");
@@ -81,8 +82,8 @@ export async function getProductMapping(id: string) {
   return toProductMappingDto(fromProductRecord(record));
 }
 
-export async function getProductAutofill(id: string) {
-  const product = await getProductMapping(id);
+export async function getProductAutofill(companyId: string, id: string) {
+  const product = await getProductMapping(companyId, id);
 
   return {
     id: product.id,
@@ -104,12 +105,12 @@ export async function getProductAutofill(id: string) {
   };
 }
 
-export async function bulkImportProductMappings(rows: unknown[]) {
+export async function bulkImportProductMappings(companyId: string, rows: unknown[]) {
   const results: Array<{ index: number; status: "created" | "error"; id?: string; error?: string }> = [];
 
   for (let i = 0; i < rows.length; i++) {
     try {
-      const record = await createProductMapping(rows[i]);
+      const record = await createProductMapping(companyId, rows[i]);
       results.push({ index: i, status: "created", id: record.id });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -122,50 +123,50 @@ export async function bulkImportProductMappings(rows: unknown[]) {
   return { total: rows.length, created, failed, results };
 }
 
-export async function createProductMapping(raw: unknown) {
-  const data = await normalizeAndValidateInput(raw);
+export async function createProductMapping(companyId: string, raw: unknown) {
+  const data = await normalizeAndValidateInput(companyId, raw);
 
   const record = await prisma.product.create({
-    data: toPrismaProductData(data),
+    data: { companyId, ...toPrismaProductData(data) },
   });
 
   return toProductMappingDto(fromProductRecord(record));
 }
 
-export async function updateProductMapping(id: string, raw: unknown) {
-  const existing = await prisma.product.findUnique({ where: { id } });
+export async function updateProductMapping(companyId: string, id: string, raw: unknown) {
+  const existing = await prisma.product.findFirst({ where: { id, companyId } });
 
   if (!existing) {
     throw httpError(404, "Product not found.");
   }
 
-  const data = await normalizeAndValidateInput(raw, fromProductRecord(existing));
+  const data = await normalizeAndValidateInput(companyId, raw, fromProductRecord(existing));
   const record = await prisma.product.update({
-    where: { id },
+    where: { id, companyId },
     data: toPrismaProductData(data),
   });
 
   return toProductMappingDto(fromProductRecord(record));
 }
 
-export async function deleteProductMapping(id: string) {
-  const existing = await prisma.product.findUnique({ where: { id } });
+export async function deleteProductMapping(companyId: string, id: string) {
+  const existing = await prisma.product.findFirst({ where: { id, companyId } });
 
   if (!existing) {
     throw httpError(404, "Product not found.");
   }
 
   await prisma.product.update({
-    where: { id },
+    where: { id, companyId },
     data: { isActive: false },
   });
 
   return { id, deleted: true };
 }
 
-export async function searchHsCodeSuggestions(query = "", limit = 20) {
+export async function searchHsCodeSuggestions(companyId: string, query = "", limit = 20) {
   const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
-  const result = await getItemDescriptions(false);
+  const result = await getItemDescriptions(companyId, false);
   const data = referenceList(result)
     .map((item) => ({
       hsCode: stringValue(item.hsCode),
@@ -190,25 +191,25 @@ export async function searchHsCodeSuggestions(query = "", limit = 20) {
   };
 }
 
-export async function resolveHsInvoiceFields(params: ResolveHsFieldsParams) {
+export async function resolveHsInvoiceFields(companyId: string, params: ResolveHsFieldsParams) {
   const hsCode = stringValue(params.hsCode);
 
   if (!hsCode) {
     throw httpError(400, "hsCode is required.");
   }
 
-  const hsDescription = await validateHsCodeAndGetDescription(hsCode, "");
+  const hsDescription = await validateHsCodeAndGetDescription(companyId, hsCode, "");
   const saleType = stringValue(params.saleType) || "Goods at standard rate (default)";
-  const transactionType = await findTransactionType(saleType);
+  const transactionType = await findTransactionType(companyId, saleType);
   const transactionTypeId = transactionType?.id ?? "";
   const annexureId = stringValue(params.annexureId) || transactionTypeId;
   const invoiceDate = stringValue(params.invoiceDate) || new Date().toISOString().slice(0, 10);
   const originationSupplier = stringValue(params.originationSupplier);
   const [rate, uom] = await Promise.all([
     transactionTypeId && originationSupplier
-      ? resolveSalesTaxRate(transactionTypeId, invoiceDate, originationSupplier)
+      ? resolveSalesTaxRate(companyId, transactionTypeId, invoiceDate, originationSupplier)
       : Promise.resolve(""),
-    annexureId ? resolveUom(hsCode, annexureId) : Promise.resolve(""),
+    annexureId ? resolveUom(companyId, hsCode, annexureId) : Promise.resolve(""),
   ]);
 
   return {
@@ -221,10 +222,11 @@ export async function resolveHsInvoiceFields(params: ResolveHsFieldsParams) {
   };
 }
 
-async function normalizeAndValidateInput(raw: unknown, existing?: ProductMappingRecord) {
+async function normalizeAndValidateInput(companyId: string, raw: unknown, existing?: ProductMappingRecord) {
   const parsed = productMappingInputSchema.parse(raw) as RawRecord;
   const hsCode = valueFrom(parsed, ["hsCode", "hs_code"], existing?.hsCode);
   const hsDescription = await validateHsCodeAndGetDescription(
+    companyId,
     hsCode,
     valueFrom(parsed, ["hsDescription", "hs_description", "description"], existing?.hsDescription),
   );
@@ -257,13 +259,13 @@ async function normalizeAndValidateInput(raw: unknown, existing?: ProductMapping
   return data;
 }
 
-async function validateHsCodeAndGetDescription(hsCode: string, fallbackDescription: string) {
+async function validateHsCodeAndGetDescription(companyId: string, hsCode: string, fallbackDescription: string) {
   if (!hsCode) {
     throw httpError(400, "hsCode is required.");
   }
 
   try {
-    const result = await getItemDescriptions(false);
+    const result = await getItemDescriptions(companyId, false);
     const list = referenceList(result);
 
     if (list.length > 0) {
@@ -289,8 +291,8 @@ async function validateHsCodeAndGetDescription(hsCode: string, fallbackDescripti
   return fallbackDescription || hsCode;
 }
 
-async function findTransactionType(saleType: string): Promise<{ id: string; description: string } | undefined> {
-  const result = await getTransactionTypes(false);
+async function findTransactionType(companyId: string, saleType: string): Promise<{ id: string; description: string } | undefined> {
+  const result = await getTransactionTypes(companyId, false);
   const normalizedSaleType = saleType.trim().toLowerCase();
 
   return referenceList(result)
@@ -305,9 +307,9 @@ async function findTransactionType(saleType: string): Promise<{ id: string; desc
     );
 }
 
-async function resolveSalesTaxRate(transTypeId: string, date: string, originationSupplier: string) {
+async function resolveSalesTaxRate(companyId: string, transTypeId: string, date: string, originationSupplier: string) {
   try {
-    const result = await getSaleTypeRates({ transTypeId, date, originationSupplier });
+    const result = await getSaleTypeRates(companyId, { transTypeId, date, originationSupplier });
     const [firstRate] = referenceList(result);
     return stringValue(firstRate?.value) || parseRate(stringValue(firstRate?.description));
   } catch {
@@ -315,9 +317,9 @@ async function resolveSalesTaxRate(transTypeId: string, date: string, originatio
   }
 }
 
-async function resolveUom(hsCode: string, annexureId: string) {
+async function resolveUom(companyId: string, hsCode: string, annexureId: string) {
   try {
-    const result = await getHsUoms({ hsCode, annexureId });
+    const result = await getHsUoms(companyId, { hsCode, annexureId });
     const [firstUom] = referenceList(result);
     return stringValue(firstUom?.description);
   } catch {

@@ -26,6 +26,7 @@
 
 .settings-header span,
 .settings-token-card__header span,
+.settings-token-card__header small,
 .settings-panel__top h2 + p,
 .settings-detail-list span {
   color: #667085;
@@ -109,6 +110,14 @@
 .settings-secondary-action:hover:not(:disabled) {
   color: #087a3d;
   background: #f3f7f5;
+}
+
+a.settings-secondary-action {
+  color: #344054;
+}
+
+a.settings-secondary-action:hover {
+  color: #087a3d;
 }
 
 .settings-primary-action:disabled,
@@ -195,7 +204,7 @@
 
 .settings-stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   min-width: 0;
   margin-bottom: 20px;
@@ -234,11 +243,136 @@
   color: #b54708;
 }
 
+.settings-stat-grid strong.danger {
+  color: #d92d20;
+}
+
 .settings-stat-grid small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-readiness-panel {
+  margin-bottom: 20px;
+}
+
+.settings-readiness-panel.ready {
+  border-color: #b8e6cc;
+}
+
+.settings-readiness-panel.blocked {
+  border-color: #ffd8d5;
+}
+
+.settings-readiness-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.settings-readiness-score.success {
+  color: #087a3d;
+  background: #e4f5ec;
+}
+
+.settings-readiness-score.danger {
+  color: #d92d20;
+  background: #ffe1df;
+}
+
+.settings-readiness-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-readiness-steps article {
+  min-width: 0;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+}
+
+.settings-readiness-steps article.success {
+  background: #fbfffd;
+  border-color: #b8e6cc;
+}
+
+.settings-readiness-steps article.danger {
+  background: #fffafa;
+  border-color: #ffc9c5;
+}
+
+.settings-readiness-steps strong {
+  display: block;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-readiness-steps span {
+  display: block;
+  margin-top: 7px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.settings-readiness-issues {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 14px;
+}
+
+.settings-readiness-issues > div,
+.settings-inline-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.settings-readiness-issues > div svg,
+.settings-inline-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.settings-readiness-issues strong {
+  display: block;
+  color: inherit;
+  font-weight: 800;
+}
+
+.settings-readiness-issues .danger {
+  color: #d92d20;
+  background: #fff1f0;
+  border: 1px solid #ffc9c5;
+}
+
+.settings-readiness-issues .warning,
+.settings-inline-warning {
+  color: #b54708;
+  background: #fff8e8;
+  border: 1px solid #fedf89;
 }
 
 .settings-workspace {
@@ -412,6 +546,10 @@
   margin-top: 4px;
 }
 
+.settings-inline-warning {
+  margin-top: 12px;
+}
+
 .settings-token-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -453,6 +591,15 @@
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-token-card__header small {
+  display: block;
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .settings-field {
@@ -654,12 +801,25 @@
   overflow-wrap: anywhere;
 }
 
+.settings-detail-list strong.success-text {
+  color: #087a3d;
+}
+
+.settings-detail-list strong.warning-text {
+  color: #b54708;
+}
+
+.settings-detail-list strong.danger-text {
+  color: #d92d20;
+}
+
 @media (max-width: 1180px) {
   .settings-workspace {
     grid-template-columns: 1fr;
   }
 
   .settings-stat-grid,
+  .settings-readiness-steps,
   .settings-token-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -702,6 +862,7 @@
 
   .settings-stat-grid,
   .settings-token-grid,
+  .settings-readiness-steps,
   .settings-segment {
     grid-template-columns: 1fr;
   }

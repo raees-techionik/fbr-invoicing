@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 import { IoMdAdd } from "react-icons/io";
 import { Link } from "react-router-dom";
@@ -136,22 +136,14 @@ const AddInvoice = () => {
   const [offlineQueueSuccess, setOfflineQueueSuccess] = useState("");
   const [fbrInvoiceNumber, setFbrInvoiceNumber] = useState('');
   const [fbrValidationErrors, setFbrValidationErrors] = useState([]);
-  const scenarioOptions = [
-    { value: "SN001", label: "SN001" },
-    { value: "SN002", label: "SN002" },
-    { value: "SN003", label: "SN003" },
-    { value: "SN005", label: "SN005" },
-    { value: "SN006", label: "SN006" },
-    { value: "S007", label: "S007" },
-    { value: "SN008", label: "SN008" },
-    { value: "SN016", label: "SN016" },   
-     { value: "SN026", label: "SN026" },
-    { value: "SN027", label: "SN027" },
-    { value: "SN028", label: "SN028" },   
-  ];
   const [salesTaxOptions, setSalesTaxOptions] = useState([]);
   const [currentScenarioData, setCurrentScenarioData] = useState(null);
   const [allScenarios, setAllScenarios] = useState([]);
+  const scenarioOptions = useMemo(() => allScenarios.map((scenario) => ({
+    value: scenario.id || scenario.scenarioId,
+    label: `${scenario.id || scenario.scenarioId}${scenario.name ? ` - ${scenario.name}` : ""}`,
+    disabled: Boolean(scenario.isPlaceholder),
+  })).filter(option => option.value), [allScenarios]);
   const [referenceData, setReferenceData] = useState(emptyReferenceData);
   const [referenceError, setReferenceError] = useState("");
   const [productMappings, setProductMappings] = useState([]);
@@ -313,8 +305,8 @@ useEffect(() => {
     return;
   }
 
-  const scenario = allScenarios.find((s) => s.id === invoiceData.scenarioId);
-  const firstItem = scenario?.fixture?.items?.[0];
+  const scenario = allScenarios.find((s) => (s.id || s.scenarioId) === invoiceData.scenarioId);
+  const firstItem = scenario?.invoice?.items?.[0] || scenario?.fixture?.items?.[0];
 
   if (!firstItem) {
     setCurrentScenarioData(null);
@@ -1151,7 +1143,7 @@ const renderFbrFieldError = (field, index) => {
         >
           <option value="">Select Scenario</option>
           {scenarioOptions.map(option => (
-            <option key={option.value} value={option.value}>
+            <option key={option.value} value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
           ))}

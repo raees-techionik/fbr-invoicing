@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   clearSandboxResults,
   getAllSandboxResults,
+  getSandboxPreflight,
   getSandboxScenarios,
   getSandboxStatus,
   runScenario,
@@ -14,11 +15,11 @@ import type { FbrInvoiceSettings } from "../services/fbr-invoice.service.js";
 export const fbrSandboxRouter = Router();
 
 // GET /scenarios — all scenario fixtures with current pass/fail status
-fbrSandboxRouter.get("/scenarios", async (_req, res, next) => {
+fbrSandboxRouter.get("/scenarios", async (req, res, next) => {
   try {
     const [scenarios, status] = await Promise.all([
       Promise.resolve(getSandboxScenarios()),
-      getSandboxStatus(),
+      getSandboxStatus(req.companyId!),
     ]);
     const statusMap = new Map(status.scenarios.map((s) => [s.scenarioId, s]));
     const data = scenarios.map((scenario) => {
@@ -36,27 +37,35 @@ fbrSandboxRouter.get("/scenarios", async (_req, res, next) => {
 });
 
 // GET /status — I9 completion dashboard (mirrors what PRAL sandbox shows)
-fbrSandboxRouter.get("/status", async (_req, res, next) => {
+fbrSandboxRouter.get("/status", async (req, res, next) => {
   try {
-    res.json({ data: await getSandboxStatus() });
+    res.json({ data: await getSandboxStatus(req.companyId!) });
   } catch (error) {
     next(error);
   }
 });
 
 // GET /summary — alias of /status for guide-compatible route naming
-fbrSandboxRouter.get("/summary", async (_req, res, next) => {
+fbrSandboxRouter.get("/summary", async (req, res, next) => {
   try {
-    res.json({ data: await getSandboxStatus() });
+    res.json({ data: await getSandboxStatus(req.companyId!) });
   } catch (error) {
     next(error);
   }
 });
 
 // GET /results — retrieve all stored scenario run results
-fbrSandboxRouter.get("/results", async (_req, res, next) => {
+fbrSandboxRouter.get("/preflight", async (req, res, next) => {
   try {
-    const results = await getAllSandboxResults();
+    res.json({ data: await getSandboxPreflight(req.companyId!) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+fbrSandboxRouter.get("/results", async (req, res, next) => {
+  try {
+    const results = await getAllSandboxResults(req.companyId!);
     res.json({ data: results });
   } catch (error) {
     next(error);
@@ -67,7 +76,7 @@ fbrSandboxRouter.get("/results", async (_req, res, next) => {
 fbrSandboxRouter.post("/run", async (req, res, next) => {
   try {
     const options = parseRunOptions(req.body);
-    res.json({ data: await runScenarios(options) });
+    res.json({ data: await runScenarios(req.companyId!, options) });
   } catch (error) {
     next(error);
   }
@@ -77,16 +86,16 @@ fbrSandboxRouter.post("/run", async (req, res, next) => {
 fbrSandboxRouter.post("/run/:scenarioId", async (req, res, next) => {
   try {
     const options = parseRunOptions(req.body);
-    res.json({ data: await runScenario(req.params.scenarioId, options) });
+    res.json({ data: await runScenario(req.companyId!, req.params.scenarioId, options) });
   } catch (error) {
     next(error);
   }
 });
 
 // DELETE /results — wipe stored results so all scenarios return to "not_run"
-fbrSandboxRouter.delete("/results", async (_req, res, next) => {
+fbrSandboxRouter.delete("/results", async (req, res, next) => {
   try {
-    res.json({ data: await clearSandboxResults() });
+    res.json({ data: await clearSandboxResults(req.companyId!) });
   } catch (error) {
     next(error);
   }

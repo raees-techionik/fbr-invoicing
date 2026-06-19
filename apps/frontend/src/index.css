@@ -254,6 +254,22 @@ code {
   color: #444;
 }
 
+.topbar-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.topbar-menu-button:hover,
+.topbar-menu-button[aria-expanded="true"] {
+  background: #f8fafc;
+}
+
 .notification-dot {
   position: absolute;
   top: -3px;

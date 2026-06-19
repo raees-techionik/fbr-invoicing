@@ -31,30 +31,90 @@ function isDevAdminLogin(email: string, password: string) {
   return allowDevAdminLogin && email === devAdminEmail && password === devAdminPassword;
 }
 
-function makeDevAdminAuthResponse() {
+async function makeDevAdminAuthResponse() {
+  const passwordHash = await bcrypt.hash(devAdminPassword, 12);
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const user = await tx.user.upsert({
+      where: { email: devAdminEmail },
+      create: {
+        id: "admin-user",
+        email: devAdminEmail,
+        passwordHash,
+        fullName: devAdminFullName,
+        isSuperAdmin: true,
+      },
+      update: {
+        passwordHash,
+        fullName: devAdminFullName,
+        isSuperAdmin: true,
+      },
+    });
+    const company = await tx.company.upsert({
+      where: { id: "admin-company" },
+      create: {
+        id: "admin-company",
+        name: devAdminWorkspaceName,
+        kind: CompanyKind.PERSONAL,
+      },
+      update: { name: devAdminWorkspaceName },
+    });
+
+    await tx.userCompanyMembership.updateMany({
+      where: { userId: user.id, isDefault: true },
+      data: { isDefault: false },
+    });
+    const membership = await tx.userCompanyMembership.upsert({
+      where: {
+        userId_companyId: {
+          userId: user.id,
+          companyId: company.id,
+        },
+      },
+      create: {
+        userId: user.id,
+        companyId: company.id,
+        role: MembershipRole.OWNER,
+        isDefault: true,
+      },
+      update: {
+        role: MembershipRole.OWNER,
+        isDefault: true,
+      },
+    });
+
+    return { user, company, membership };
+  });
+
   const token = signAccessToken({
-    sub: "admin-user",
-    email: devAdminEmail,
+    sub: result.user.id,
+    email: result.user.email,
     isSuperAdmin: true,
   });
 
   return {
     accessToken: token,
     user: {
-      id: "admin-user",
-      email: devAdminEmail,
-      fullName: devAdminFullName,
-      phone: "",
+      id: result.user.id,
+      email: result.user.email,
+      fullName: result.user.fullName,
+      phone: result.user.phone,
     },
     companies: [
       {
-        id: "admin-company",
-        name: devAdminWorkspaceName,
-        kind: CompanyKind.PERSONAL,
-        role: MembershipRole.OWNER,
-        isDefault: true,
+        id: result.company.id,
+        name: result.company.name,
+        kind: result.company.kind,
+        role: result.membership.role,
+        isDefault: result.membership.isDefault,
       },
     ],
+    activeCompany: {
+      id: result.company.id,
+      name: result.company.name,
+      kind: result.company.kind,
+      membershipRole: result.membership.role,
+      isDefault: result.membership.isDefault,
+    },
   };
 }
 
@@ -118,6 +178,13 @@ export async function registerUser(raw: unknown) {
       name: result.company.name,
       kind: result.company.kind,
     },
+    activeCompany: {
+      id: result.company.id,
+      name: result.company.name,
+      kind: result.company.kind,
+      membershipRole: MembershipRole.OWNER,
+      isDefault: true,
+    },
   };
 }
 
@@ -153,6 +220,7 @@ export async function loginUser(raw: unknown) {
     include: { company: true },
     orderBy: [{ isDefault: "desc" }, { id: "asc" }],
   });
+  const activeMembership = memberships[0];
 
   return {
     accessToken: token,
@@ -169,29 +237,17 @@ export async function loginUser(raw: unknown) {
       role: m.role,
       isDefault: m.isDefault,
     })),
+    activeCompany: activeMembership ? {
+      id: activeMembership.company.id,
+      name: activeMembership.company.name,
+      kind: activeMembership.company.kind,
+      membershipRole: activeMembership.role,
+      isDefault: activeMembership.isDefault,
+    } : null,
   };
 }
 
 export async function getProfile(userId: string) {
-  if (allowDevAdminLogin && userId === "admin-user") {
-    return {
-      id: "admin-user",
-      email: devAdminEmail,
-      fullName: devAdminFullName,
-      phone: "",
-      isSuperAdmin: true,
-      companies: [
-        {
-          id: "admin-company",
-          name: devAdminWorkspaceName,
-          kind: CompanyKind.PERSONAL,
-          role: MembershipRole.OWNER,
-          isDefault: true,
-        },
-      ],
-    };
-  }
-
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {

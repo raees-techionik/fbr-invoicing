@@ -40,6 +40,7 @@ let autoProcessorTimer: ReturnType<typeof setInterval> | null = null;
 let autoProcessorRunning = false;
 
 type DevOfflineQueueRecord = {
+  companyId: string;
   id: string;
   invoiceId: string;
   invoicePayload: FbrInvoicePayload;
@@ -58,7 +59,7 @@ type DevOfflineQueueRecord = {
 
 let devOfflineQueue: DevOfflineQueueRecord[] = [];
 
-export async function enqueueOfflineInvoice(raw: QueueInvoiceInput | FbrInvoiceInput) {
+export async function enqueueOfflineInvoice(companyId: string, raw: QueueInvoiceInput | FbrInvoiceInput) {
   const invoice = extractInvoice(raw);
   const settings = extractSettings(raw);
   const payload = formatInvoiceForFbr(invoice, parseEnvironment(settings?.environment));
@@ -68,6 +69,7 @@ export async function enqueueOfflineInvoice(raw: QueueInvoiceInput | FbrInvoiceI
     "offlineQueue.enqueue",
     prisma.invoice.create({
       data: {
+        companyId,
         invoiceType: payload.invoiceType,
         invoiceDate: parseDate(payload.invoiceDate),
         invoiceRefNo: optionalString(payload.invoiceRefNo),
@@ -103,6 +105,7 @@ export async function enqueueOfflineInvoice(raw: QueueInvoiceInput | FbrInvoiceI
 
   if (!created) {
     const record: DevOfflineQueueRecord = {
+      companyId,
       id: `dev-queue-${randomUUID()}`,
       invoiceId: `dev-invoice-${randomUUID()}`,
       invoicePayload: payload,
@@ -126,11 +129,11 @@ export async function enqueueOfflineInvoice(raw: QueueInvoiceInput | FbrInvoiceI
   });
 }
 
-export async function listOfflineQueue(filters: ListQueueFilters = {}) {
+export async function listOfflineQueue(companyId: string, filters: ListQueueFilters = {}) {
   const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 250);
   const offset = Math.max(Number(filters.offset) || 0, 0);
   const status = parseStatus(filters.status);
-  const where = status ? { status } : {};
+  const where = { invoice: { companyId }, ...(status ? { status } : {}) };
   const result = await withDevDbFallback(
     "offlineQueue.list",
     Promise.all([
@@ -149,7 +152,8 @@ export async function listOfflineQueue(filters: ListQueueFilters = {}) {
   );
 
   if (!result) {
-    const filtered = status ? devOfflineQueue.filter((record) => record.status === status) : devOfflineQueue;
+    const companyRecords = devOfflineQueue.filter((record) => record.companyId === companyId);
+    const filtered = status ? companyRecords.filter((record) => record.status === status) : companyRecords;
     const records = filtered.slice(offset, offset + limit);
     return {
       data: records.map(toFallbackQueueDto),
@@ -173,10 +177,11 @@ export async function listOfflineQueue(filters: ListQueueFilters = {}) {
   };
 }
 
-export async function getOfflineQueueSummary() {
+export async function getOfflineQueueSummary(companyId: string) {
   const records = await withDevDbFallback(
     "offlineQueue.summary",
     prisma.offlineQueue.findMany({
+      where: { invoice: { companyId } },
       include: {
         invoice: true,
       },
@@ -184,7 +189,7 @@ export async function getOfflineQueueSummary() {
     () => null,
   );
   if (!records) {
-    return offlineQueueSummary(devOfflineQueue);
+    return offlineQueueSummary(devOfflineQueue.filter((record) => record.companyId === companyId));
   }
   
   const pending = records.filter((record) => record.status === "PENDING").length;
@@ -205,13 +210,14 @@ export async function getOfflineQueueSummary() {
   };
 }
 
-export async function processOfflineQueue(options: ProcessQueueOptions = {}) {
+export async function processOfflineQueue(companyId: string, options: ProcessQueueOptions = {}) {
   const retryFailed = parseBoolean(options.retryFailed, false);
   const limit = Math.min(Math.max(Number(options.limit) || 25, 1), 100);
   const records = await withDevDbFallback(
     "offlineQueue.process.findMany",
     prisma.offlineQueue.findMany({
       where: {
+        invoice: { companyId },
         status: retryFailed ? { in: ["PENDING", "FAILED"] } : "PENDING",
         retryCount: retryFailed ? undefined : { lt: MAX_RETRY_COUNT },
       },
@@ -225,6 +231,7 @@ export async function processOfflineQueue(options: ProcessQueueOptions = {}) {
   );
   if (!records) {
     const candidates = devOfflineQueue
+      .filter((record) => record.companyId === companyId)
       .filter((record) => retryFailed ? ["PENDING", "FAILED"].includes(record.status) : record.status === "PENDING")
       .slice(0, limit);
     return {
@@ -238,7 +245,7 @@ export async function processOfflineQueue(options: ProcessQueueOptions = {}) {
   const results = [];
 
   for (const record of records) {
-    results.push(await processQueueRecord(record, options.settings));
+    results.push(await processQueueRecord(companyId, record, options.settings));
   }
 
   return {
@@ -268,28 +275,36 @@ export function startAutomaticOfflineQueueProcessor() {
 
     autoProcessorRunning = true;
     try {
-      const settings = await getRuntimeFbrSettings();
-
-      if (!settings.useMock && !settings.activeToken) {
-        console.warn("[offline-queue] automatic processor skipped: active FBR token is missing.");
-        return;
-      }
-
-      const result = await processOfflineQueue({
-        limit,
-        settings: {
-          environment: settings.environment,
-          token: settings.activeToken,
-          useMock: settings.useMock,
-        },
+      const queuedCompanies = await prisma.offlineQueue.findMany({
+        where: { status: "PENDING" },
+        select: { invoice: { select: { companyId: true } } },
       });
+      const companyIds = [...new Set(queuedCompanies.map((record) => record.invoice.companyId))];
 
-      if (result.processed > 0) {
-        console.log("[offline-queue] automatic processor completed", {
-          processed: result.processed,
-          uploaded: result.uploaded,
-          failed: result.failed,
+      for (const companyId of companyIds) {
+        const settings = await getRuntimeFbrSettings(companyId);
+        if (!settings.useMock && !settings.activeToken) {
+          console.warn("[offline-queue] automatic processor skipped company: active FBR token is missing.", { companyId });
+          continue;
+        }
+
+        const result = await processOfflineQueue(companyId, {
+          limit,
+          settings: {
+            environment: settings.environment,
+            token: settings.activeToken,
+            useMock: settings.useMock,
+          },
         });
+
+        if (result.processed > 0) {
+          console.log("[offline-queue] automatic processor completed", {
+            companyId,
+            processed: result.processed,
+            uploaded: result.uploaded,
+            failed: result.failed,
+          });
+        }
       }
     } catch (error) {
       console.warn("[offline-queue] automatic processor failed", errorMessage(error));
@@ -303,15 +318,15 @@ export function startAutomaticOfflineQueueProcessor() {
   console.log("[offline-queue] automatic processor started: every 2 minutes.");
 }
 
-export async function retryOfflineQueueItem(id: string, settings?: FbrInvoiceSettings) {
+export async function retryOfflineQueueItem(companyId: string, id: string, settings?: FbrInvoiceSettings) {
   const record = await withDevDbFallback(
     "offlineQueue.retry.findUnique",
-    getQueueRecord(id),
+    getQueueRecord(companyId, id),
     () => null,
   );
 
   if (!record) {
-    const devRecord = devOfflineQueue.find((item) => item.id === id);
+    const devRecord = devOfflineQueue.find((item) => item.id === id && item.companyId === companyId);
     if (!devRecord) {
       throw httpError(404, "Offline queue invoice not found.");
     }
@@ -322,10 +337,11 @@ export async function retryOfflineQueueItem(id: string, settings?: FbrInvoiceSet
     throw httpError(409, "Invoice is already uploaded.");
   }
 
-  return processQueueRecord(record, settings);
+  return processQueueRecord(companyId, record, settings);
 }
 
 async function processQueueRecord(
+  companyId: string,
   record: Awaited<ReturnType<typeof getQueueRecord>>,
   overrideSettings?: FbrInvoiceSettings,
 ) {
@@ -333,15 +349,15 @@ async function processQueueRecord(
   const payload = record.invoicePayload as unknown as FbrInvoicePayload;
 
   try {
-    const result = await submitInvoiceToFbr(payloadToInvoiceInput(payload), overrideSettings ?? {});
+    const result = await submitInvoiceToFbr(companyId, payloadToInvoiceInput(payload), overrideSettings ?? {});
 
     if (!result.isValid) {
-      return toQueueDto(await markQueueFailed(record.id, retryCount, result.message));
+      return toQueueDto(await markQueueFailed(companyId, record.id, retryCount, result.message));
     }
 
     const uploadedAt = new Date();
     const updated = await prisma.offlineQueue.update({
-      where: { id: record.id },
+      where: { id: record.id, invoice: { companyId } },
       data: {
         status: "UPLOADED",
         uploadedAt,
@@ -374,15 +390,15 @@ async function processQueueRecord(
 
     return toQueueDto(updated);
   } catch (error) {
-    return toQueueDto(await markQueueFailed(record.id, retryCount, errorMessage(error)));
+    return toQueueDto(await markQueueFailed(companyId, record.id, retryCount, errorMessage(error)));
   }
 }
 
-async function markQueueFailed(id: string, retryCount: number, lastError: string) {
+async function markQueueFailed(companyId: string, id: string, retryCount: number, lastError: string) {
   const terminalFailure = retryCount >= MAX_RETRY_COUNT;
 
   return prisma.offlineQueue.update({
-    where: { id },
+    where: { id, invoice: { companyId } },
     data: {
       status: terminalFailure ? "FAILED" : "PENDING",
       retryCount,
@@ -399,9 +415,9 @@ async function markQueueFailed(id: string, retryCount: number, lastError: string
   });
 }
 
-async function getQueueRecord(id: string) {
-  const record = await prisma.offlineQueue.findUnique({
-    where: { id },
+async function getQueueRecord(companyId: string, id: string) {
+  const record = await prisma.offlineQueue.findFirst({
+    where: { id, invoice: { companyId } },
     include: {
       invoice: true,
     },

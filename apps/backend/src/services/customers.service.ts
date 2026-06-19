@@ -14,7 +14,7 @@ type CustomerDto = {
   updated_at: string;
 };
 
-let devCustomers: CustomerDto[] = [
+const initialDevCustomers: CustomerDto[] = [
   {
     id: "dev-customer-alpha",
     name: "Alpha Traders",
@@ -40,6 +40,13 @@ let devCustomers: CustomerDto[] = [
     updated_at: devIsoNow(),
   },
 ];
+const devCustomersByCompany = new Map<string, CustomerDto[]>();
+
+function getDevCustomers(companyId: string) {
+  const customers = devCustomersByCompany.get(companyId) ?? structuredClone(initialDevCustomers);
+  devCustomersByCompany.set(companyId, customers);
+  return customers;
+}
 
 function httpError(status: number, message: string): Error & { status: number } {
   const err = new Error(message) as Error & { status: number };
@@ -73,7 +80,7 @@ function toDto(record: {
   };
 }
 
-export async function listCustomers(params: { search?: string; limit?: number } = {}) {
+export async function listCustomers(companyId: string, params: { search?: string; limit?: number } = {}) {
   const search = params.search?.trim() || "";
   const take = Math.min(Math.max(Number(params.limit) || 100, 1), 250);
 
@@ -82,6 +89,7 @@ export async function listCustomers(params: { search?: string; limit?: number } 
     prisma.customer.findMany({
       where: search
         ? {
+            companyId,
             OR: [
               { name: { contains: search, mode: "insensitive" } },
               { cnic: { contains: search, mode: "insensitive" } },
@@ -92,7 +100,7 @@ export async function listCustomers(params: { search?: string; limit?: number } 
               { registrationType: { contains: search, mode: "insensitive" } },
             ],
           }
-        : {},
+        : { companyId },
       orderBy: { createdAt: "desc" },
       take,
     }),
@@ -101,7 +109,7 @@ export async function listCustomers(params: { search?: string; limit?: number } 
 
   if (!records) {
     const normalized = search.toLowerCase();
-    return devCustomers
+    return getDevCustomers(companyId)
       .filter((customer) => (
         !normalized ||
         customer.name.toLowerCase().includes(normalized) ||
@@ -118,21 +126,21 @@ export async function listCustomers(params: { search?: string; limit?: number } 
   return records.map(toDto);
 }
 
-export async function getCustomer(id: string) {
+export async function getCustomer(companyId: string, id: string) {
   const record = await withDevDbFallback(
     "customer.findUnique",
-    prisma.customer.findUnique({ where: { id } }),
+    prisma.customer.findFirst({ where: { id, companyId } }),
     () => null,
   );
   if (!record) {
-    const devCustomer = devCustomers.find((customer) => customer.id === id);
+    const devCustomer = getDevCustomers(companyId).find((customer) => customer.id === id);
     if (devCustomer) return devCustomer;
   }
   if (!record) throw httpError(404, "Customer not found.");
   return toDto(record);
 }
 
-export async function createCustomer(body: Record<string, unknown>) {
+export async function createCustomer(companyId: string, body: Record<string, unknown>) {
   const data = {
     name: String(body.name || ""),
     cnic: String(body.cnic || ""),
@@ -144,7 +152,7 @@ export async function createCustomer(body: Record<string, unknown>) {
   };
   const record = await withDevDbFallback(
     "customer.create",
-    prisma.customer.create({ data }),
+    prisma.customer.create({ data: { companyId, ...data } }),
     () => null,
   );
   if (!record) {
@@ -161,19 +169,20 @@ export async function createCustomer(body: Record<string, unknown>) {
       created_at: now,
       updated_at: now,
     };
-    devCustomers = [created, ...devCustomers];
+    devCustomersByCompany.set(companyId, [created, ...getDevCustomers(companyId)]);
     return created;
   }
   return toDto(record);
 }
 
-export async function updateCustomer(id: string, body: Record<string, unknown>) {
+export async function updateCustomer(companyId: string, id: string, body: Record<string, unknown>) {
   const existing = await withDevDbFallback(
     "customer.findUniqueForUpdate",
-    prisma.customer.findUnique({ where: { id } }),
+    prisma.customer.findFirst({ where: { id, companyId } }),
     () => null,
   );
   if (!existing) {
+    const devCustomers = getDevCustomers(companyId);
     const current = devCustomers.find((customer) => customer.id === id);
     if (current) {
       const updated = {
@@ -187,7 +196,7 @@ export async function updateCustomer(id: string, body: Record<string, unknown>) 
         registration_type: String(body.registration_type ?? body.registrationType ?? current.registration_type),
         updated_at: devIsoNow(),
       };
-      devCustomers = devCustomers.map((customer) => customer.id === id ? updated : customer);
+      devCustomersByCompany.set(companyId, devCustomers.map((customer) => customer.id === id ? updated : customer));
       return updated;
     }
   }
@@ -206,7 +215,7 @@ export async function updateCustomer(id: string, body: Record<string, unknown>) 
   };
   const record = await withDevDbFallback(
     "customer.update",
-    prisma.customer.update({ where: { id }, data }),
+    prisma.customer.update({ where: { id, companyId }, data }),
     () => null,
   );
   if (!record) {
@@ -222,26 +231,28 @@ export async function updateCustomer(id: string, body: Record<string, unknown>) 
       created_at: devIsoNow(),
       updated_at: devIsoNow(),
     };
-    devCustomers = [updated, ...devCustomers.filter((customer) => customer.id !== id)];
+    const devCustomers = getDevCustomers(companyId);
+    devCustomersByCompany.set(companyId, [updated, ...devCustomers.filter((customer) => customer.id !== id)]);
     return updated;
   }
   return toDto(record);
 }
 
-export async function deleteCustomer(id: string) {
+export async function deleteCustomer(companyId: string, id: string) {
   const existing = await withDevDbFallback(
     "customer.findUniqueForDelete",
-    prisma.customer.findUnique({ where: { id } }),
+    prisma.customer.findFirst({ where: { id, companyId } }),
     () => null,
   );
+  const devCustomers = getDevCustomers(companyId);
   if (!existing && devCustomers.some((customer) => customer.id === id)) {
-    devCustomers = devCustomers.filter((customer) => customer.id !== id);
+    devCustomersByCompany.set(companyId, devCustomers.filter((customer) => customer.id !== id));
     return { id, deleted: true };
   }
   if (!existing) throw httpError(404, "Customer not found.");
   await withDevDbFallback(
     "customer.delete",
-    prisma.customer.delete({ where: { id } }),
+    prisma.customer.delete({ where: { id, companyId } }),
     () => null,
   );
   return { id, deleted: true };

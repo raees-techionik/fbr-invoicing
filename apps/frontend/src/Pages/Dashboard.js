@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bar,
   CartesianGrid,
@@ -34,14 +34,62 @@ import './Dashboard.css';
 
 const dayFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
+const dateRanges = {
+  today: { label: 'Today', days: 1 },
+  sevenDays: { label: 'Last 7 days', days: 7 },
+  thirtyDays: { label: 'Last 30 days', days: 30 },
+  ninetyDays: { label: 'Last 90 days', days: 90 },
+};
+
+const notifications = [
+  {
+    title: 'Sandbox token needs live setup',
+    body: 'Add the company sandbox token before running live FBR validation.',
+    time: 'Now',
+  },
+  {
+    title: '13 sandbox fixtures ready',
+    body: 'All required scenario fixtures are available from the backend.',
+    time: 'Today',
+  },
+  {
+    title: 'Onboarding status updated',
+    body: 'Current company is in sandbox testing.',
+    time: 'Today',
+  },
+];
+
 function Dashboard() {
   useBlockBackButton();
+  const navigate = useNavigate();
 
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState({ invoices: false });
   const [chartPeriod, setChartPeriod] = useState('daily');
   const [chartData, setChartData] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateRangeKey, setDateRangeKey] = useState('sevenDays');
+  const [openMenu, setOpenMenu] = useState(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const topbarRef = useRef(null);
+  const userEmail = localStorage.getItem('email') || 'admin@fbr.com';
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (!topbarRef.current?.contains(event.target)) setOpenMenu(null);
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setOpenMenu(null);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
 
   const fetchInvoices = async () => {
     try {
@@ -99,11 +147,27 @@ function Dashboard() {
     .sort((a, b) => new Date(b.invoiceDate || 0) - new Date(a.invoiceDate || 0))
     .slice(0, 5);
 
-  const formatDateRange = () => {
+  const formatDateRange = (rangeKey = dateRangeKey) => {
+    const days = dateRanges[rangeKey]?.days || dateRanges.sevenDays.days;
     const end = new Date();
     const start = new Date();
-    start.setDate(end.getDate() - 6);
+    start.setDate(end.getDate() - (days - 1));
     return `${dayFormatter.format(start)} - ${dayFormatter.format(end)}, ${end.getFullYear()}`;
+  };
+
+  const toggleMenu = (menu) => {
+    setOpenMenu((current) => (current === menu ? null : menu));
+  };
+
+  const selectDateRange = (key) => {
+    setDateRangeKey(key);
+    setOpenMenu(null);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('email');
+    localStorage.removeItem('token');
+    navigate('/');
   };
 
   const formatChartLabel = (value) => {
@@ -241,12 +305,37 @@ function Dashboard() {
     <div className="fbr-dashboard" id="dashboard-wrapper">
       <header className="fbr-topbar">
         <h1>Dashboard</h1>
-        <div className="fbr-topbar__actions">
-          <button className="fbr-date-filter" type="button">
-            <FiCalendar />
-            {formatDateRange()}
-            <FiChevronDown />
-          </button>
+        <div className="fbr-topbar__actions" ref={topbarRef}>
+          <div className="fbr-menu-wrap">
+            <button
+              className="fbr-date-filter"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'date'}
+              onClick={() => toggleMenu('date')}
+            >
+              <FiCalendar />
+              {formatDateRange()}
+              <FiChevronDown />
+            </button>
+            {openMenu === 'date' && (
+              <div className="fbr-dropdown fbr-date-menu" role="menu" aria-label="Date range">
+                {Object.entries(dateRanges).map(([key, range]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={dateRangeKey === key}
+                    className={dateRangeKey === key ? 'active' : ''}
+                    onClick={() => selectDateRange(key)}
+                  >
+                    <span>{range.label}</span>
+                    <small>{formatDateRange(key)}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="fbr-search">
             <FiSearch />
             <input
@@ -257,16 +346,77 @@ function Dashboard() {
             />
             <span>Ctrl K</span>
           </div>
-          <button className="fbr-bell" type="button" aria-label="Notifications">
-            <FiBell />
-            <span>3</span>
-          </button>
-          <button className="fbr-avatar" type="button" aria-label="Account menu">
-            TA
-          </button>
-          <button className="fbr-plain-icon" type="button" aria-label="Open account menu">
-            <FiChevronDown />
-          </button>
+          <div className="fbr-menu-wrap">
+            <button
+              className="fbr-bell"
+              type="button"
+              aria-label="Notifications"
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'notifications'}
+              onClick={() => toggleMenu('notifications')}
+            >
+              <FiBell />
+              <span>{notifications.length}</span>
+            </button>
+            {openMenu === 'notifications' && (
+              <div className="fbr-dropdown fbr-notification-menu" role="menu" aria-label="Notifications">
+                <div className="fbr-dropdown__header">
+                  <strong>Notifications</strong>
+                  <span>{notifications.length} new</span>
+                </div>
+                {notifications.map((notification) => (
+                  <button key={notification.title} type="button" role="menuitem" onClick={() => setOpenMenu(null)}>
+                    <strong>{notification.title}</strong>
+                    <span>{notification.body}</span>
+                    <small>{notification.time}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="fbr-menu-wrap fbr-account-wrap">
+            <button
+              className="fbr-avatar"
+              type="button"
+              aria-label="Account menu"
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'account'}
+              onClick={() => toggleMenu('account')}
+            >
+              TA
+            </button>
+            <button
+              className="fbr-plain-icon"
+              type="button"
+              aria-label="Open account menu"
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'account'}
+              onClick={() => toggleMenu('account')}
+            >
+              <FiChevronDown />
+            </button>
+            {openMenu === 'account' && (
+              <div className="fbr-dropdown fbr-account-menu" role="menu" aria-label="Account">
+                <div className="fbr-dropdown__header">
+                  <strong>Welcome</strong>
+                  <span>{userEmail}</span>
+                </div>
+                <Link to="/account/edit-profile" role="menuitem" onClick={() => setOpenMenu(null)}>Account</Link>
+                <Link to="/support" role="menuitem" onClick={() => setOpenMenu(null)}>Help</Link>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="danger"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    setShowLogoutConfirm(true);
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -441,6 +591,17 @@ function Dashboard() {
           </aside>
         </section>
       </main>
+      {showLogoutConfirm && (
+        <div className="logout-overlay">
+          <div className="logout-popup">
+            <h5>Are you sure you want to logout?</h5>
+            <div className="mt-3 d-flex justify-content-center gap-3">
+              <button className="btn buttonsave p-2 px-4" type="button" onClick={logout}>Yes</button>
+              <button className="btn btn-secondary px-4" type="button" onClick={() => setShowLogoutConfirm(false)}>No</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
