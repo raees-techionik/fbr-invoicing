@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiRefreshCw, FiRotateCw, FiUploadCloud } from 'react-icons/fi';
+import { FiClock, FiRefreshCw, FiRotateCw, FiUploadCloud } from 'react-icons/fi';
 import { MdOutlineWarningAmber } from 'react-icons/md';
 import {
   getOfflineQueue,
@@ -25,14 +25,14 @@ function normalizeStatus(status) {
 function statusBadge(status) {
   switch (normalizeStatus(status)) {
     case 'SUBMITTED':
-      return <span className="offline-queue-status success">SUBMITTED</span>;
+      return <span className="offline-queue-status success">✓ Synced</span>;
     case 'UPLOAD_FAILED':
-      return <span className="offline-queue-status danger">UPLOAD FAILED</span>;
+      return <span className="offline-queue-status danger">✗ Upload Failed</span>;
     case 'EXPIRED':
-      return <span className="offline-queue-status expired">DEADLINE PASSED</span>;
+      return <span className="offline-queue-status expired">Deadline Passed</span>;
     case 'OFFLINE':
     default:
-      return <span className="offline-queue-status neutral">OFFLINE</span>;
+      return <span className="offline-queue-status neutral">◎ Offline</span>;
   }
 }
 
@@ -69,6 +69,13 @@ function formatAge(item) {
   return h > 0 ? `${h}h ${m}m ago` : `${m}m ago`;
 }
 
+function formatRemaining(item) {
+  const hours = Math.max(0, 24 - hoursQueued(item));
+  const h = Math.floor(hours);
+  const m = Math.floor((hours - h) * 60);
+  return h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+}
+
 function formatDateTime(value) {
   if (!value) return '-';
   const date = new Date(value);
@@ -79,17 +86,6 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function deadlineBadge(item) {
-  const state = deadlineState(item);
-  if (state === 'expired') {
-    return <span className="offline-queue-deadline danger">24h deadline passed</span>;
-  }
-  if (state === 'warning') {
-    return <span className="offline-queue-deadline warning">20h warning</span>;
-  }
-  return <span className="offline-queue-deadline neutral">Within deadline</span>;
 }
 
 export default function OfflineQueue() {
@@ -162,6 +158,9 @@ export default function OfflineQueue() {
   const warningCount = summary.warningCount ?? items.filter((item) => deadlineState(item) === 'warning').length;
   const expiredCount = summary.expiredCount ?? items.filter((item) => deadlineState(item) === 'expired').length;
 
+  const activeItems = items.filter((item) => normalizeStatus(item.status) !== 'SUBMITTED');
+  const syncedItems = items.filter((item) => normalizeStatus(item.status) === 'SUBMITTED');
+
   const Spinner = ({ sm } = {}) => (
     <span className={`spinner-border${sm ? ' spinner-border-sm' : ''}`} role="status">
       <span className="visually-hidden">Loading...</span>
@@ -172,7 +171,7 @@ export default function OfflineQueue() {
     <div className="offline-queue-page">
       <div className="offline-queue-header">
         <div>
-          <span>FBR Upload Safety</span>
+          <span>FBR upload safety</span>
           <h1>Offline Queue</h1>
           <p>Monitor queued invoices, retry failed uploads, and keep the 24-hour FBR deadline visible.</p>
         </div>
@@ -180,14 +179,14 @@ export default function OfflineQueue() {
         <div className="offline-queue-header__actions">
           <Link to="/invoice" className="offline-queue-secondary-action">Back to invoices</Link>
           <button className="offline-queue-secondary-action" onClick={fetchAll} disabled={loading}>
-            <FiRefreshCw size={16} /> Refresh
+            <FiRefreshCw size={15} /> Refresh
           </button>
           <button
             className="offline-queue-primary-action"
             onClick={handleProcessAll}
             disabled={processing || pendingCount === 0}
           >
-            {processing ? <><Spinner sm /> Processing...</> : <><FiUploadCloud size={17} /> Upload All Pending ({pendingCount})</>}
+            {processing ? <><Spinner sm /> Processing...</> : <><FiUploadCloud size={16} /> Upload All Pending ({pendingCount})</>}
           </button>
         </div>
       </div>
@@ -209,7 +208,7 @@ export default function OfflineQueue() {
 
       {(warningCount > 0 || expiredCount > 0) && (
         <div className={`offline-queue-alert ${expiredCount > 0 ? 'danger' : 'warning'}`} role="alert">
-          <MdOutlineWarningAmber size={22} />
+          <MdOutlineWarningAmber size={20} />
           <div>
             <strong>{expiredCount > 0 ? 'Deadline attention required' : 'Deadline warning'}</strong>
             <p>
@@ -221,75 +220,102 @@ export default function OfflineQueue() {
         </div>
       )}
 
-      <section className="offline-queue-panel">
-        <div className="offline-queue-panel__top">
-          <div>
-            <h2>Queued invoices</h2>
-            <p>Auto-refreshes every 15 seconds. Warnings begin after 20 hours.</p>
-          </div>
-        </div>
+      {loading ? (
+        <div className="offline-queue-empty"><Spinner /> Loading queue...</div>
+      ) : activeItems.length === 0 ? (
+        <div className="offline-queue-empty">No invoices currently in the offline queue.</div>
+      ) : (
+        activeItems.map((item) => {
+          const invoice = item.invoice || {};
+          const ref = item.invoice_ref_no || item.invoiceRefNo || invoice.invoiceRefNo || item.id;
+          const buyer = item.buyer_business_name || item.buyerBusinessName || invoice.buyerBusinessName || '-';
+          const amount = item.amount_pkr ?? item.amountPkr ?? invoice.amountPkr ?? 0;
+          const status = normalizeStatus(item.status);
+          const state = deadlineState(item);
+          const canRetry = status === 'UPLOAD_FAILED' || (status === 'OFFLINE' && state === 'expired');
+          const pct = Math.min(100, (hoursQueued(item) / 24) * 100);
 
-        {loading ? (
-          <div className="offline-queue-empty"><Spinner /> Loading queue...</div>
-        ) : items.length === 0 ? (
-          <div className="offline-queue-empty">No invoices in the offline queue.</div>
-        ) : (
+          return (
+            <article className={`offline-queue-card ${state}`} key={item.id}>
+              <div className="offline-queue-card__top">
+                <div className={`offline-queue-card__icon ${state}`}>
+                  {status === 'UPLOAD_FAILED' ? <MdOutlineWarningAmber size={18} /> : <FiClock size={18} />}
+                </div>
+                <div className="offline-queue-card__title">
+                  <strong>{ref} · {buyer}</strong>
+                  <span>Queued {formatAge(item)} {status === 'UPLOAD_FAILED' ? '· Upload failed' : '· Waiting for sync'}</span>
+                </div>
+                <div className="offline-queue-card__amount">
+                  <strong>PKR {Number(amount || 0).toLocaleString()}</strong>
+                  <span>{statusBadge(item.status)}</span>
+                </div>
+              </div>
+
+              <div className="offline-queue-card__deadline">
+                <div className="offline-queue-card__bar"><div className={`offline-queue-card__bar-fill ${state}`} style={{ width: `${pct}%` }} /></div>
+                <span className={`offline-queue-card__remaining ${state}`}>
+                  {state === 'expired' ? '24h deadline passed' : formatRemaining(item)}
+                </span>
+              </div>
+
+              <div className="offline-queue-card__footer">
+                {canRetry && (
+                  <button
+                    className="offline-queue-retry-action"
+                    onClick={() => handleRetry(item.id)}
+                    disabled={retryingId === item.id}
+                  >
+                    {retryingId === item.id ? <Spinner sm /> : <><FiRotateCw size={13} /> Retry Now</>}
+                  </button>
+                )}
+                <span className="offline-queue-card__attempts">Attempts: {item.attempt_count ?? item.attemptCount ?? item.retryCount ?? 0}</span>
+                <span className="offline-queue-card__due">Due: {formatDateTime(item.uploadDeadlineAt || item.upload_deadline_at)}</span>
+              </div>
+            </article>
+          );
+        })
+      )}
+
+      {syncedItems.length > 0 && (
+        <section className="offline-queue-panel">
+          <div className="offline-queue-panel__top">
+            <div>
+              <h2>Recently Synced</h2>
+              <p>Invoices that have already been submitted to FBR from the offline queue.</p>
+            </div>
+          </div>
+
           <div className="offline-queue-table-wrap">
             <table className="offline-queue-table">
               <thead>
                 <tr>
-                  <th>Invoice Ref</th>
+                  <th>Invoice</th>
                   <th>Buyer</th>
-                  <th>Queued</th>
-                  <th>Deadline</th>
-                  <th>Attempts</th>
+                  <th>Queued For</th>
+                  <th>Synced At</th>
                   <th>Status</th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => {
+                {syncedItems.map((item) => {
                   const invoice = item.invoice || {};
                   const ref = item.invoice_ref_no || item.invoiceRefNo || invoice.invoiceRefNo || item.id;
                   const buyer = item.buyer_business_name || item.buyerBusinessName || invoice.buyerBusinessName || '-';
-                  const status = normalizeStatus(item.status);
-                  const state = deadlineState(item);
-                  const canRetry = status === 'UPLOAD_FAILED' || (status === 'OFFLINE' && state === 'expired');
-
                   return (
-                    <tr key={item.id} className={state}>
+                    <tr key={item.id}>
                       <td className="offline-queue-ref">{ref}</td>
                       <td className="offline-queue-buyer">{buyer}</td>
-                      <td>
-                        <strong>{formatAge(item)}</strong>
-                        <span>{formatDateTime(queuedTime(item))}</span>
-                      </td>
-                      <td>
-                        <div>{deadlineBadge(item)}</div>
-                        <span>Due: {formatDateTime(item.uploadDeadlineAt || item.upload_deadline_at)}</span>
-                        <span>Warning: {formatDateTime(item.warningAt || item.warning_at)}</span>
-                      </td>
-                      <td className="offline-queue-attempts">{item.attempt_count ?? item.attemptCount ?? item.retryCount ?? 0}</td>
-                      <td>{statusBadge(state === 'expired' && status !== 'UPLOAD_FAILED' ? 'EXPIRED' : item.status)}</td>
-                      <td>
-                        {canRetry && (
-                          <button
-                            className="offline-queue-retry-action"
-                            onClick={() => handleRetry(item.id)}
-                            disabled={retryingId === item.id}
-                          >
-                            {retryingId === item.id ? <Spinner sm /> : <><FiRotateCw size={14} /> Retry</>}
-                          </button>
-                        )}
-                      </td>
+                      <td>{formatAge(item)}</td>
+                      <td>{formatDateTime(item.updatedAt || item.updated_at)}</td>
+                      <td>{statusBadge(item.status)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }

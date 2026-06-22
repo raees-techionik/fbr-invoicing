@@ -2,11 +2,11 @@ import React, { useState } from "react";
 import axios from "axios";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
-import { FiArrowRight, FiLock, FiMail, FiShield } from "react-icons/fi";
+import { FiArrowRight, FiLock, FiMail } from "react-icons/fi";
 import logo from "./Images/New Black Logo 1.png";
 import icon from "./Images/TechionikIcon.png";
 import "./Login.css";
-import { setActiveCompanyId } from "./services/companySession";
+import { setActiveCompanyId, setToken } from "./services/companySession";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -14,6 +14,7 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const successMessage = location.state?.successMessage || "";
@@ -41,7 +42,7 @@ const Login = () => {
 
       const { accessToken, user, activeCompany } = response.data;
 
-      localStorage.setItem("token", accessToken);
+      setToken(accessToken, rememberMe);
       localStorage.setItem("email", user.email);
       setActiveCompanyId(activeCompany?.id);
 
@@ -108,9 +109,14 @@ const Login = () => {
           </label>
 
           <div className="login-form-row">
-            <span className="login-secure-note">
-              <FiShield size={15} /> JWT protected session
-            </span>
+            <label className="login-remember">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              Remember me
+            </label>
             <Link to="/forgot-password">Forgot Password?</Link>
           </div>
 

@@ -123,6 +123,16 @@ export default function Preview() {
         </div>
       </div>
 
+      <div className="upload-invoice-steps">
+        <div className="upload-invoice-step done"><div className="upload-invoice-step__dot"><FiCheckCircle size={12} /></div><span>Upload File</span></div>
+        <div className="upload-invoice-step__line" />
+        <div className="upload-invoice-step done"><div className="upload-invoice-step__dot"><FiCheckCircle size={12} /></div><span>Validate</span></div>
+        <div className="upload-invoice-step__line" />
+        <div className={`upload-invoice-step ${done ? 'done' : 'active'}`}><div className="upload-invoice-step__dot">{done ? <FiCheckCircle size={12} /> : 3}</div><span>Review &amp; Confirm</span></div>
+        <div className="upload-invoice-step__line" />
+        <div className={`upload-invoice-step ${done ? 'active' : ''}`}><div className="upload-invoice-step__dot">4</div><span>Submit</span></div>
+      </div>
+
       <div className="upload-preview-summary">
         {[
           { label: 'Total Invoices', value: invoices.length, tone: 'neutral' },

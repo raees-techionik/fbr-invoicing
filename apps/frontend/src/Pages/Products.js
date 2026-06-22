@@ -20,6 +20,48 @@ import {
 } from '../services/fbrProductMappingsApi';
 import './Products.css';
 
+/* ─── helpers ─────────────────────────────────────────────── */
+const avatarTones = ['av-p', 'av-b', 'av-g', 'av-o', 'av-s'];
+
+function initialsOf(name) {
+  const words = String(name || '').trim().split(/[\s—\-]+/);
+  return ((words[0]?.[0] || '') + (words[1]?.[0] || '')).toUpperCase() || 'PR';
+}
+
+function toneFor(id, name) {
+  const key = String(id || '') + String(name || '');
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffff;
+  return avatarTones[h % avatarTones.length];
+}
+
+function downloadProductsCsv(rows) {
+  if (!rows.length) return;
+  const cols = ['Product Name', 'HS Code', 'Description', 'Tax Rate', 'UoM', 'In Stock', 'Status', 'Sale Type', 'SRO Schedule'];
+  const lines = [cols.join(',')];
+  rows.forEach(p => {
+    lines.push([
+      `"${productName(p)}"`,
+      `"${productHsCode(p)}"`,
+      `"${productDescription(p)}"`,
+      productRate(p),
+      `"${productUom(p)}"`,
+      productStock(p),
+      `"${productStatus(p)}"`,
+      `"${productSaleType(p)}"`,
+      `"${p.sro_schedule_no || p.sroScheduleNo || ''}"`,
+    ].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'products.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ─── constants ────────────────────────────────────────────── */
 const emptyProductForm = {
   product_name: '',
   rate: '',
@@ -36,11 +78,7 @@ const emptyProductForm = {
   extra_tax_applicable: false,
 };
 
-const emptyReferenceData = {
-  hsCodes: [],
-  uoms: [],
-  transactionTypes: [],
-};
+const emptyReferenceData = { hsCodes: [], uoms: [], transactionTypes: [] };
 
 const importColumnAliases = {
   productName: ['productName', 'product_name', 'product name', 'name', 'product'],
@@ -72,39 +110,44 @@ const productFormToPayload = (formData) => ({
   status: formData.status,
 });
 
-const productName = (product) => product.product_name || product.productName || '';
-const productRate = (product) => product.rate ?? product.salesTaxRate ?? '';
-const productStock = (product) => product.in_stock ?? product.inStock ?? '';
-const productHsCode = (product) => product.hs_code || product.hsCode || '';
-const productUom = (product) => product.unit_of_measure || product.unitOfMeasurement || '';
-const productDescription = (product) => product.description || product.hsDescription || '';
-const productStatus = (product) => product.status || 'Active';
-const productSaleType = (product) => product.sale_type || product.saleType || '';
+const productName = (p) => p.product_name || p.productName || '';
+const productRate = (p) => p.rate ?? p.salesTaxRate ?? '';
+const productStock = (p) => p.in_stock ?? p.inStock ?? '';
+const productHsCode = (p) => p.hs_code || p.hsCode || '';
+const productUom = (p) => p.unit_of_measure || p.unitOfMeasurement || '';
+const productDescription = (p) => p.description || p.hsDescription || '';
+const productStatus = (p) => p.status || 'Active';
+const productSaleType = (p) => p.sale_type || p.saleType || '';
 
-const normalizeHeader = (value) => String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
-const normalizeHs = (value) => String(value || '').trim().replace(/\s+/g, '').toLowerCase();
+const isOutOfStock = (p) => {
+  const s = productStock(p);
+  return s !== '' && s !== null && s !== undefined && parseInt(s, 10) === 0;
+};
+
+const getDisplayStatus = (p) => {
+  if (isOutOfStock(p)) return 'Out of Stock';
+  return productStatus(p);
+};
+
+const normalizeHeader = (v) => String(v || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+const normalizeHs = (v) => String(v || '').trim().replace(/\s+/g, '').toLowerCase();
 
 const getImportCell = (row, field) => {
   const aliases = importColumnAliases[field] || [field];
-  const normalizedRow = Object.entries(row).reduce((acc, [key, value]) => {
-    acc[normalizeHeader(key)] = value;
-    return acc;
-  }, {});
-
+  const normalized = Object.entries(row).reduce((acc, [k, v]) => { acc[normalizeHeader(k)] = v; return acc; }, {});
   for (const alias of aliases) {
-    const value = normalizedRow[normalizeHeader(alias)];
-    if (value !== undefined && value !== null && String(value).trim() !== '') {
-      return String(value).trim();
-    }
+    const val = normalized[normalizeHeader(alias)];
+    if (val !== undefined && val !== null && String(val).trim() !== '') return String(val).trim();
   }
-
   return '';
 };
 
-const parseImportBoolean = (value) => ['true', 'yes', 'y', '1'].includes(String(value || '').trim().toLowerCase());
+const parseImportBoolean = (v) => ['true', 'yes', 'y', '1'].includes(String(v || '').trim().toLowerCase());
 
+/* ─── component ────────────────────────────────────────────── */
 function Products() {
   useBlockBackButton();
+
   const [products, setProducts] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -122,17 +165,13 @@ function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState('All Status');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [viewingProduct, setViewingProduct] = useState(null);
   const [loading, setLoading] = useState({
-    add: false,
-    edit: false,
-    delete: false,
-    fetch: false,
-    fetchSingle: false,
-    fetchSingleEdit: false,
-    fetchSingleView: false,
-    hsSearch: false,
-    autofill: false,
-    import: false,
+    add: false, edit: false, delete: false, fetch: false,
+    fetchSingle: false, fetchSingleEdit: false, fetchSingleView: false,
+    hsSearch: false, autofill: false, import: false,
   });
   const itemsPerPage = 8;
   const modalRef = useRef();
@@ -147,6 +186,7 @@ function Products() {
     loadSellerProfile();
   }, []);
 
+  /* ─── API functions ─────── */
   const fetchProducts = async () => {
     try {
       setLoading(prev => ({ ...prev, fetch: true }));
@@ -190,29 +230,20 @@ function Products() {
   }, [searchParams, navigate, location.pathname]);
 
   useEffect(() => {
-    const modalElement = modalRef.current;
-    if (modalElement) {
-      const handleHidden = () => {
-        document.body.classList.remove('modal-open');
-        Array.from(document.getElementsByClassName('modal-backdrop')).forEach(backdrop => backdrop.remove());
-      };
-
-      modalElement.addEventListener('hidden.bs.modal', handleHidden);
-      return () => {
-        modalElement.removeEventListener('hidden.bs.modal', handleHidden);
-      };
-    }
+    const el = modalRef.current;
+    if (!el) return;
+    const handleHidden = () => {
+      document.body.classList.remove('modal-open');
+      Array.from(document.getElementsByClassName('modal-backdrop')).forEach(b => b.remove());
+    };
+    el.addEventListener('hidden.bs.modal', handleHidden);
+    return () => el.removeEventListener('hidden.bs.modal', handleHidden);
   }, []);
 
   const handleShowModal = async (productId = null, viewOnly = false) => {
     if (productId !== null) {
       try {
-        setLoading(prev => ({
-          ...prev,
-          fetchSingle: true,
-          fetchSingleView: viewOnly,
-          fetchSingleEdit: !viewOnly,
-        }));
+        setLoading(prev => ({ ...prev, fetchSingle: true, fetchSingleView: viewOnly, fetchSingleEdit: !viewOnly }));
         const product = await getProductMapping(productId);
         setEditingProduct(product);
         setFormData({
@@ -236,12 +267,7 @@ function Products() {
         console.error('Error fetching product:', error);
         setApiError(error.response?.data?.error || 'Error fetching product mapping.');
       } finally {
-        setLoading(prev => ({
-          ...prev,
-          fetchSingle: false,
-          fetchSingleView: false,
-          fetchSingleEdit: false,
-        }));
+        setLoading(prev => ({ ...prev, fetchSingle: false, fetchSingleView: false, fetchSingleEdit: false }));
       }
     } else {
       setFormData(emptyProductForm);
@@ -258,9 +284,8 @@ function Products() {
   const handleInputChange = (e) => {
     const { name, value, checked, type } = e.target;
     const inputValue = type === 'checkbox' ? checked : value;
-
     if (name === 'hs_code') {
-      const selectedHsCode = referenceData.hsCodes.find((item) => item.hsCode === inputValue);
+      const selectedHsCode = referenceData.hsCodes.find(item => item.hsCode === inputValue);
       setFormData(prev => ({
         ...prev,
         hs_code: inputValue,
@@ -271,11 +296,7 @@ function Products() {
         setHsSearch(`${inputValue}${selectedHsCode?.description || hsCodeLookup[inputValue] ? ` - ${selectedHsCode?.description || hsCodeLookup[inputValue]}` : ''}`);
       }
     } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: name === 'tax_type' ? String(' ') : inputValue,
-        tax: 0,
-      }));
+      setFormData(prev => ({ ...prev, [name]: name === 'tax_type' ? String(' ') : inputValue, tax: 0 }));
     }
   };
 
@@ -289,23 +310,20 @@ function Products() {
       modalRef.current.style.display = 'none';
     }
     document.body.classList.remove('modal-open');
-    Array.from(document.getElementsByClassName('modal-backdrop')).forEach(backdrop => backdrop.remove());
+    Array.from(document.getElementsByClassName('modal-backdrop')).forEach(b => b.remove());
   };
 
   const handleSave = async () => {
     setApiError('');
     setLoading(prev => ({ ...prev, add: true }));
     try {
-      const createdProduct = await createProductMapping(productFormToPayload(formData));
+      const created = await createProductMapping(productFormToPayload(formData));
       hideModal();
       setFormData(emptyProductForm);
       setEditingProduct(null);
       setCurrentPage(1);
-      const refreshedProducts = await fetchProducts();
-      setProducts([
-        createdProduct,
-        ...refreshedProducts.filter(product => product.id !== createdProduct.id),
-      ]);
+      const refreshed = await fetchProducts();
+      setProducts([created, ...refreshed.filter(p => p.id !== created.id)]);
     } catch (error) {
       console.error('Error saving product:', error);
       setApiError(error.response?.data?.error || error.message || 'Error saving product mapping.');
@@ -335,6 +353,8 @@ function Products() {
       try {
         await deleteProductMapping(productId);
         setApiError('');
+        if (viewingProduct?.id === productId) setViewingProduct(null);
+        setSelectedIds(prev => prev.filter(id => id !== productId));
         fetchProducts();
       } catch (error) {
         console.error('Error deleting product:', error);
@@ -350,11 +370,7 @@ function Products() {
     const value = event.target.value;
     setHsSearch(value);
     setProductNotice('');
-    if (value.trim().length < 2) {
-      setHsSuggestions([]);
-      return;
-    }
-
+    if (value.trim().length < 2) { setHsSuggestions([]); return; }
     setLoading(prev => ({ ...prev, hsSearch: true }));
     try {
       const suggestions = await searchHsCodeSuggestions(value.trim(), 12);
@@ -369,22 +385,14 @@ function Products() {
   };
 
   const selectHsSuggestion = (suggestion) => {
-    setFormData(prev => ({
-      ...prev,
-      hs_code: suggestion.hsCode || '',
-      description: suggestion.description || prev.description,
-    }));
+    setFormData(prev => ({ ...prev, hs_code: suggestion.hsCode || '', description: suggestion.description || prev.description }));
     setHsSearch(`${suggestion.hsCode}${suggestion.description ? ` - ${suggestion.description}` : ''}`);
     setHsSuggestions([]);
     setProductNotice('HS code and description filled from FBR reference data.');
   };
 
   const autofillFbrFields = async () => {
-    if (!formData.hs_code) {
-      setProductNotice('Select an HS code before autofill.');
-      return;
-    }
-
+    if (!formData.hs_code) { setProductNotice('Select an HS code before autofill.'); return; }
     setLoading(prev => ({ ...prev, autofill: true }));
     setProductNotice('');
     setApiError('');
@@ -434,7 +442,7 @@ function Products() {
     const knownSaleTypes = new Set(saleTypeOptions.map(item => String(item.value).trim().toLowerCase()).filter(Boolean));
 
     return rawRows
-      .filter(row => Object.values(row).some(value => String(value || '').trim() !== ''))
+      .filter(row => Object.values(row).some(v => String(v || '').trim() !== ''))
       .map((row, index) => {
         const hsCode = getImportCell(row, 'hsCode');
         const hsMatch = hsReferenceMap.get(normalizeHs(hsCode));
@@ -461,13 +469,9 @@ function Products() {
         if (!payload.saleType) errors.push('Sale type is required');
         if (payload.saleType && knownSaleTypes.size > 0 && !knownSaleTypes.has(payload.saleType.toLowerCase())) errors.push('Sale type is not in loaded FBR references');
         if (payload.salesTaxRate !== '' && Number.isNaN(Number(String(payload.salesTaxRate).replace('%', '')))) errors.push('Sales tax rate must be numeric');
-
         return {
           rowNumber: index + 2,
-          payload: {
-            ...payload,
-            salesTaxRate: payload.salesTaxRate === '' ? 0 : Number(String(payload.salesTaxRate).replace('%', '')),
-          },
+          payload: { ...payload, salesTaxRate: payload.salesTaxRate === '' ? 0 : Number(String(payload.salesTaxRate).replace('%', '')) },
           errors,
           status: errors.length ? 'invalid' : 'ready',
         };
@@ -482,21 +486,14 @@ function Products() {
     setImportRows([]);
     setImportFileName(file?.name || '');
     if (!file) return;
-
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
       const firstSheet = workbook.SheetNames[0];
-      if (!firstSheet) {
-        setImportError('No worksheet was found in the selected file.');
-        return;
-      }
+      if (!firstSheet) { setImportError('No worksheet was found in the selected file.'); return; }
       const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: '' });
       const rows = buildImportRows(rawRows);
-      if (rows.length === 0) {
-        setImportError('No product rows were found in the selected file.');
-        return;
-      }
+      if (rows.length === 0) { setImportError('No product rows were found in the selected file.'); return; }
       setImportRows(rows);
     } catch (error) {
       console.error('Failed to parse product import file:', error);
@@ -506,22 +503,18 @@ function Products() {
 
   const handleImportProducts = async () => {
     const readyRows = importRows.filter(row => row.status === 'ready');
-    if (readyRows.length === 0) {
-      setImportError('No valid rows are ready to import.');
-      return;
-    }
-
+    if (readyRows.length === 0) { setImportError('No valid rows are ready to import.'); return; }
     setLoading(prev => ({ ...prev, import: true }));
     setImportError('');
     try {
       const result = await bulkImportProductMappings(readyRows.map(row => row.payload));
-      const resultByImportIndex = new Map((result.results || []).map(item => [item.index, item]));
-      let readyIndex = 0;
+      const resultByIndex = new Map((result.results || []).map(item => [item.index, item]));
+      let ri = 0;
       const rowsWithResult = importRows.map(row => {
         if (row.status !== 'ready') return row;
-        const rowResult = resultByImportIndex.get(readyIndex++);
-        if (rowResult?.status === 'created') return { ...row, status: 'created', createdId: rowResult.id };
-        return { ...row, status: 'failed', errors: [rowResult?.error || 'Import failed'] };
+        const r = resultByIndex.get(ri++);
+        if (r?.status === 'created') return { ...row, status: 'created', createdId: r.id };
+        return { ...row, status: 'failed', errors: [r?.error || 'Import failed'] };
       });
       setImportRows(rowsWithResult);
       setImportResult({
@@ -561,366 +554,621 @@ function Products() {
       furtherTaxApplicable: 'No',
       extraTaxApplicable: 'No',
     }];
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const csv = XLSX.utils.sheet_to_csv(worksheet);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const csv = XLSX.utils.sheet_to_csv(ws);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'product-import-template.csv';
-    link.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'product-import-template.csv';
+    a.click();
     URL.revokeObjectURL(url);
   };
 
-  const filteredProducts = (products || []).filter(product => {
-    if (!product) return false;
-    const term = searchTerm.toLowerCase();
-    return (
-      productName(product).toLowerCase().includes(term) ||
-      productHsCode(product).toLowerCase().includes(term) ||
-      productDescription(product).toLowerCase().includes(term)
-    );
-  });
-
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    switch (sortBy) {
-      case 'Newest':
-        return new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0);
-      case 'Oldest':
-        return new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0);
-      case 'A-Z':
-        return productName(a).localeCompare(productName(b));
-      case 'Z-A':
-        return productName(b).localeCompare(productName(a));
-      case 'Rate-High':
-        return parseFloat(productRate(b) || 0) - parseFloat(productRate(a) || 0);
-      case 'Rate-Low':
-        return parseFloat(productRate(a) || 0) - parseFloat(productRate(b) || 0);
-      case 'Stock-High':
-        return parseInt(productStock(b) || 0, 10) - parseInt(productStock(a) || 0, 10);
-      case 'Stock-Low':
-        return parseInt(productStock(a) || 0, 10) - parseInt(productStock(b) || 0, 10);
-      default:
-        return 0;
+  /* ─── bulk actions ─────────────────────────────────────────── */
+  const handleBulkDelete = async () => {
+    if (!selectedIds.length) return;
+    if (!window.confirm(`Delete ${selectedIds.length} product(s)?`)) return;
+    for (const id of selectedIds) {
+      try { await deleteProductMapping(id); } catch (e) { console.error(e); }
     }
-  });
+    if (viewingProduct && selectedIds.includes(viewingProduct.id)) setViewingProduct(null);
+    setSelectedIds([]);
+    fetchProducts();
+  };
 
-  const activeCount = products.filter(product => productStatus(product) === 'Active').length;
-  const inactiveCount = products.length - activeCount;
-  const mappedHsCount = products.filter(product => productHsCode(product)).length;
-  const totalPages = Math.ceil(sortedProducts.length / itemsPerPage);
-  const paginatedProducts = sortedProducts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-  const importReadyCount = importRows.filter(row => row.status === 'ready').length;
-  const importInvalidCount = importRows.filter(row => row.status === 'invalid').length;
-  const importCreatedCount = importRows.filter(row => row.status === 'created').length;
-  const importFailedCount = importRows.filter(row => row.status === 'failed').length;
+  const handleBulkMarkInactive = async () => {
+    if (!selectedIds.length) return;
+    const toMark = products.filter(p => selectedIds.includes(p.id));
+    for (const p of toMark) {
+      try {
+        await updateProductMapping(p.id, {
+          productName: productName(p),
+          hsCode: productHsCode(p),
+          hsDescription: productDescription(p),
+          salesTaxRate: Number(productRate(p)) || 0,
+          unitOfMeasurement: productUom(p),
+          inStock: productStock(p),
+          sroScheduleNo: p.sro_schedule_no || p.sroScheduleNo || '',
+          saleType: productSaleType(p),
+          furtherTaxApplicable: Boolean(p.further_tax_applicable ?? p.furtherTaxApplicable),
+          extraTaxApplicable: Boolean(p.extra_tax_applicable ?? p.extraTaxApplicable),
+          status: 'Inactive',
+        });
+      } catch (e) { console.error(e); }
+    }
+    setSelectedIds([]);
+    fetchProducts();
+  };
 
-  const Spinner = ({ sm } = {}) => (
-    <span className={`spinner-border${sm ? ' spinner-border-sm' : ' spinner-border-sm'}`} role="status">
-      <span className="visually-hidden">Loading...</span>
-    </span>
-  );
+  /* ─── selection ────────────────────────────────────────────── */
+  const toggleSelectAll = () => {
+    const pageIds = paginatedProducts.map(p => p.id);
+    const allSelected = pageIds.every(id => selectedIds.includes(id));
+    if (allSelected) setSelectedIds(prev => prev.filter(id => !pageIds.includes(id)));
+    else setSelectedIds(prev => [...new Set([...prev, ...pageIds])]);
+  };
 
+  const toggleSelectOne = (id) =>
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  /* ─── derived data ─────────────────────────────────────────── */
   const hsCodeOptions = referenceData.hsCodes.length
-    ? referenceData.hsCodes.map((item) => ({
-        value: item.hsCode,
-        label: `${item.hsCode}${item.description ? ` - ${item.description}` : ''}`,
-      }))
-    : hsCodes.map((item) => ({
-        value: item.code,
-        label: `${item.code}${item.description ? ` - ${item.description}` : ''}`,
-      }));
+    ? referenceData.hsCodes.map(item => ({ value: item.hsCode, label: `${item.hsCode}${item.description ? ` - ${item.description}` : ''}` }))
+    : hsCodes.map(item => ({ value: item.code, label: `${item.code}${item.description ? ` - ${item.description}` : ''}` }));
 
   const uomOptions = referenceData.uoms.length
-    ? referenceData.uoms.map((uom) => ({
-        value: uom.description,
-        label: uom.description,
-      }))
-    : [
-        { value: 'Hour', label: 'Hour' },
-        { value: 'Kg', label: 'Kg' },
-        { value: 'unit 5%', label: 'unit 5%' },
-      ];
+    ? referenceData.uoms.map(u => ({ value: u.description, label: u.description }))
+    : [{ value: 'Hour', label: 'Hour' }, { value: 'Kg', label: 'Kg' }, { value: 'unit 5%', label: 'unit 5%' }];
 
   const saleTypeOptions = referenceData.transactionTypes.length
-    ? referenceData.transactionTypes.map((transactionType) => ({
-        value: transactionType.description,
-        label: transactionType.description,
-      }))
+    ? referenceData.transactionTypes.map(t => ({ value: t.description, label: t.description }))
     : [
         { value: 'Goods at standard rate (default)', label: 'Goods at standard rate (default)' },
         { value: 'Goods at Reduced Rate', label: 'Goods at Reduced Rate' },
         { value: 'Exempt Goods', label: 'Exempt Goods' },
       ];
 
+  const filteredProducts = (products || []).filter(product => {
+    if (!product) return false;
+    const term = searchTerm.toLowerCase();
+    const matchSearch =
+      productName(product).toLowerCase().includes(term) ||
+      productHsCode(product).toLowerCase().includes(term) ||
+      productDescription(product).toLowerCase().includes(term);
+
+    const stock = parseInt(productStock(product) || '-1', 10);
+    const status = productStatus(product);
+    let matchStatus = true;
+    if (statusFilter === 'Active') matchStatus = status === 'Active' && stock !== 0;
+    else if (statusFilter === 'Inactive') matchStatus = status === 'Inactive';
+    else if (statusFilter === 'OOS') matchStatus = stock === 0;
+
+    return matchSearch && matchStatus;
+  });
+
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    switch (sortBy) {
+      case 'Newest': return new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0);
+      case 'Oldest': return new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0);
+      case 'A-Z': return productName(a).localeCompare(productName(b));
+      case 'Z-A': return productName(b).localeCompare(productName(a));
+      case 'Rate-High': return parseFloat(productRate(b) || 0) - parseFloat(productRate(a) || 0);
+      case 'Rate-Low': return parseFloat(productRate(a) || 0) - parseFloat(productRate(b) || 0);
+      case 'Stock-High': return parseInt(productStock(b) || 0, 10) - parseInt(productStock(a) || 0, 10);
+      case 'Stock-Low': return parseInt(productStock(a) || 0, 10) - parseInt(productStock(b) || 0, 10);
+      default: return 0;
+    }
+  });
+
+  const totalPages = Math.ceil(sortedProducts.length / itemsPerPage);
+  const paginatedProducts = sortedProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const pageIds = paginatedProducts.map(p => p.id);
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.includes(id));
+
+  const activeCount = products.filter(p => productStatus(p) === 'Active').length;
+  const oosCount = products.filter(p => isOutOfStock(p)).length;
+  const taxRates = products.map(p => parseFloat(productRate(p))).filter(Number.isFinite);
+  const avgTaxRate = taxRates.length ? Math.round(taxRates.reduce((t, r) => t + r, 0) / taxRates.length) : 0;
+
+  const importReadyCount = importRows.filter(r => r.status === 'ready').length;
+  const importInvalidCount = importRows.filter(r => r.status === 'invalid').length;
+  const importCreatedCount = importRows.filter(r => r.status === 'created').length;
+  const importFailedCount = importRows.filter(r => r.status === 'failed').length;
+
+  const Spinner = () => (
+    <span className="spinner-border spinner-border-sm" role="status">
+      <span className="visually-hidden">Loading…</span>
+    </span>
+  );
+
+  /* ─── render ───────────────────────────────────────────────── */
   return (
-    <div className="products-page">
-      <div className="products-header">
-        <div>
-          <span>Product mappings</span>
-          <h1>Products</h1>
-          <p>Manage HS code, UoM, tax rate, and sale type mappings used by Add Invoice.</p>
-        </div>
+    <div className="prd-page">
 
-        <div className="products-header__actions">
-          <button className="products-secondary-action" onClick={fetchProducts} disabled={loading.fetch}>
-            <FiRefreshCw size={16} /> Refresh
+      {/* Page header */}
+      <div className="prd-page-hdr">
+        <div className="prd-page-hdr__left">
+          <h2>Products</h2>
+          <p>Manage product catalog with HS codes and sales tax mapping for FBR invoices</p>
+        </div>
+        <div className="prd-page-hdr__right">
+          <button className="prd-btn-outline" onClick={() => downloadProductsCsv(sortedProducts)}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV
           </button>
-          <button
-            className="products-primary-action"
-            onClick={() => handleShowModal()}
-            disabled={loading.add}
-          >
-            {loading.add ? <Spinner sm /> : <><FaPlus /> Add Product</>}
+          <button className="prd-btn-primary" onClick={() => handleShowModal()} disabled={loading.add}>
+            {loading.add ? <Spinner /> : (
+              <>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add Product
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      <div className="products-stat-grid">
-        <div>
-          <span>Total mappings</span>
-          <strong>{products.length}</strong>
-        </div>
-        <div>
-          <span>Active</span>
-          <strong className="success">{activeCount}</strong>
-        </div>
-        <div>
-          <span>Inactive</span>
-          <strong>{inactiveCount}</strong>
-        </div>
-        <div>
-          <span>HS mapped</span>
-          <strong className="success">{mappedHsCount}</strong>
-        </div>
-      </div>
-
-      <section className="products-import-panel">
-        <div className="products-panel__top">
-          <div>
-            <h2>Bulk Import</h2>
-            <p>Upload a CSV or Excel file, review validation results, then import the rows that are ready.</p>
+      {/* Mini-stats */}
+      <div className="prd-mini-stats">
+        <div className="prd-mini-card c-p">
+          <div className="prd-mini-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+              <line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
           </div>
-          <div className="products-header__actions">
-            <button className="products-secondary-action" type="button" onClick={downloadImportTemplate}>
-              <FiDownload size={16} /> Template
+          <div>
+            <div className="prd-mini-num">{products.length}</div>
+            <div className="prd-mini-lbl">Total Products</div>
+          </div>
+        </div>
+        <div className="prd-mini-card c-g">
+          <div className="prd-mini-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <div>
+            <div className="prd-mini-num">{activeCount}</div>
+            <div className="prd-mini-lbl">Active</div>
+          </div>
+        </div>
+        <div className="prd-mini-card c-red">
+          <div className="prd-mini-ico" style={{ background: 'rgba(239,68,68,.1)' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+              <line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
+          </div>
+          <div>
+            <div className="prd-mini-num" style={{ color: '#EF4444' }}>{oosCount}</div>
+            <div className="prd-mini-lbl">Out of Stock</div>
+          </div>
+        </div>
+        <div className="prd-mini-card c-b">
+          <div className="prd-mini-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <div>
+            <div className="prd-mini-num">{avgTaxRate}%</div>
+            <div className="prd-mini-lbl">Avg Sales Tax Rate</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bulk Import card */}
+      <div className="prd-import-card">
+        <div className="prd-import-hdr">
+          <div>
+            <div className="prd-import-title">Bulk Import</div>
+            <div className="prd-import-sub">Upload CSV or Excel, review validation results, then import ready rows</div>
+          </div>
+          <div className="prd-import-hdr-actions">
+            <button className="prd-btn-outline prd-btn-sm" type="button" onClick={downloadImportTemplate}>
+              <FiDownload size={13} /> Template
             </button>
-            <label className="products-secondary-action products-upload-action">
-              <FiUpload size={16} /> Choose file
+            <label className="prd-btn-outline prd-btn-sm prd-upload-lbl">
+              <FiUpload size={13} /> Choose file
               <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImportFile} />
             </label>
           </div>
         </div>
 
         {importFileName && (
-          <div className="products-import-summary">
+          <div className="prd-import-summary">
             <div><span>File</span><strong>{importFileName}</strong></div>
-            <div><span>Ready</span><strong className="success">{importReadyCount}</strong></div>
-            <div><span>Needs Fix</span><strong className={importInvalidCount ? 'danger' : ''}>{importInvalidCount}</strong></div>
-            <div><span>Imported</span><strong className="success">{importCreatedCount}</strong></div>
-            <div><span>Failed</span><strong className={importFailedCount ? 'danger' : ''}>{importFailedCount}</strong></div>
+            <div><span>Ready</span><strong className="ok">{importReadyCount}</strong></div>
+            <div><span>Needs Fix</span><strong className={importInvalidCount ? 'err' : ''}>{importInvalidCount}</strong></div>
+            <div><span>Imported</span><strong className="ok">{importCreatedCount}</strong></div>
+            <div><span>Failed</span><strong className={importFailedCount ? 'err' : ''}>{importFailedCount}</strong></div>
           </div>
         )}
 
-        {importError && <div className="products-error">{importError}</div>}
+        {importError && <div className="prd-import-error">{importError}</div>}
         {importResult && (
-          <div className={`products-import-result ${importResult.failed ? 'warning' : 'success'}`}>
+          <div className={`prd-import-result${importResult.failed ? ' warn' : ' ok'}`}>
             Imported {importResult.created} of {importResult.submitted} submitted rows. {importResult.skipped} invalid row{importResult.skipped === 1 ? '' : 's'} skipped.
           </div>
         )}
 
         {importRows.length > 0 && (
           <>
-            <div className="products-import-actions">
-              <button className="products-primary-action" type="button" onClick={handleImportProducts} disabled={loading.import || importReadyCount === 0}>
-                {loading.import ? <Spinner sm /> : <><FiUpload size={16} /> Import ready rows</>}
+            <div className="prd-import-actions">
+              <button className="prd-btn-primary prd-btn-sm" type="button" onClick={handleImportProducts} disabled={loading.import || importReadyCount === 0}>
+                {loading.import ? <Spinner /> : <><FiUpload size={13} /> Import ready rows</>}
               </button>
-              <button className="products-secondary-action" type="button" onClick={clearImport} disabled={loading.import}>Clear import</button>
+              <button className="prd-btn-outline prd-btn-sm" type="button" onClick={clearImport} disabled={loading.import}>Clear</button>
             </div>
-            <div className="products-table-wrap products-import-table-wrap">
-              <table className="products-table products-import-table">
+            <div className="prd-import-tbl-wrap">
+              <table className="prd-import-tbl">
                 <thead>
                   <tr>
-                    <th>Row</th>
-                    <th>Product</th>
-                    <th>HS Code</th>
-                    <th>Rate</th>
-                    <th>UOM</th>
-                    <th>Sale Type</th>
-                    <th>Status</th>
-                    <th>Feedback</th>
+                    <th>Row</th><th>Product</th><th>HS Code</th><th>Rate</th>
+                    <th>UOM</th><th>Sale Type</th><th>Status</th><th>Feedback</th>
                   </tr>
                 </thead>
                 <tbody>
                   {importRows.slice(0, 25).map(row => (
                     <tr key={row.rowNumber}>
-                      <td className="products-ref">{row.rowNumber}</td>
-                      <td><strong>{row.payload.productName || '-'}</strong><span>{row.payload.hsDescription || 'No description'}</span></td>
-                      <td className="products-ref">{row.payload.hsCode || '-'}</td>
-                      <td>{row.payload.salesTaxRate !== '' ? `${row.payload.salesTaxRate}%` : '-'}</td>
-                      <td>{row.payload.unitOfMeasurement || '-'}</td>
-                      <td>{row.payload.saleType || '-'}</td>
-                      <td><span className={`products-status ${['ready', 'created'].includes(row.status) ? 'success' : row.status === 'invalid' || row.status === 'failed' ? 'danger' : 'neutral'}`}>{row.status}</span></td>
+                      <td className="prd-mono">{row.rowNumber}</td>
+                      <td>
+                        <strong>{row.payload.productName || '—'}</strong>
+                        <span>{row.payload.hsDescription || 'No description'}</span>
+                      </td>
+                      <td className="prd-mono">{row.payload.hsCode || '—'}</td>
+                      <td>{row.payload.salesTaxRate !== '' ? `${row.payload.salesTaxRate}%` : '—'}</td>
+                      <td>{row.payload.unitOfMeasurement || '—'}</td>
+                      <td>{row.payload.saleType || '—'}</td>
+                      <td>
+                        <span className={`prd-badge ${['ready', 'created'].includes(row.status) ? 'b-ok' : row.status === 'invalid' || row.status === 'failed' ? 'b-bad' : 'b-neutral'}`}>
+                          {row.status}
+                        </span>
+                      </td>
                       <td>{row.errors?.length ? row.errors.join('; ') : row.createdId ? `Created #${row.createdId}` : 'Ready to import'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {importRows.length > 25 && <div className="products-import-limit">Showing first 25 of {importRows.length} parsed rows.</div>}
+              {importRows.length > 25 && <div className="prd-import-limit">Showing first 25 of {importRows.length} parsed rows.</div>}
             </div>
           </>
         )}
-      </section>
+      </div>
 
-      <section className="products-panel">
-        <div className="products-panel__top">
-          <div>
-            <h2>All Products</h2>
-            <p>{sortedProducts.length} product mapping{sortedProducts.length !== 1 ? 's' : ''} match the current view.</p>
+      {/* Main table card */}
+      <div className="prd-tbl-card">
+        <div className="prd-filter-bar">
+          <div className="prd-chip-row">
+            {[
+              { key: 'All Status', label: 'All Status' },
+              { key: 'Active', label: 'Active' },
+              { key: 'Inactive', label: 'Inactive' },
+              { key: 'OOS', label: 'Out of Stock' },
+            ].map(({ key, label }) => (
+              <span
+                key={key}
+                className={`prd-chip${statusFilter === key ? ' on' : ''}`}
+                onClick={() => { setStatusFilter(key); setCurrentPage(1); }}
+              >{label}</span>
+            ))}
           </div>
-          <div className="products-toolbar">
-            <label className="products-search">
-              <FiSearch size={16} />
-              <input
-                type="search"
-                placeholder="Search name, HS code, description..."
-                value={searchTerm}
-                onChange={e => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-            </label>
-            <select
-              value={sortBy}
-              onChange={(e) => {
-                setSortBy(e.target.value);
-                setCurrentPage(1);
-              }}
-            >
-              <option value="">Sort by</option>
-              <option value="Newest">Newest</option>
-              <option value="Oldest">Oldest</option>
-              <option value="A-Z">Name (A-Z)</option>
-              <option value="Z-A">Name (Z-A)</option>
-              <option value="Rate-High">Rate (High to Low)</option>
-              <option value="Rate-Low">Rate (Low to High)</option>
-              <option value="Stock-High">Stock (High to Low)</option>
-              <option value="Stock-Low">Stock (Low to High)</option>
-            </select>
-          </div>
+          <div className="prd-filter-sep" />
+          <label className="prd-search">
+            <FiSearch size={14} />
+            <input
+              type="search"
+              placeholder="Search name or HS code…"
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            />
+          </label>
+          <select
+            className="prd-sort-select"
+            value={sortBy}
+            onChange={e => { setSortBy(e.target.value); setCurrentPage(1); }}
+          >
+            <option value="">Sort: Name A→Z</option>
+            <option value="Newest">Newest first</option>
+            <option value="Oldest">Oldest first</option>
+            <option value="A-Z">Name A→Z</option>
+            <option value="Z-A">Name Z→A</option>
+            <option value="Rate-High">Tax Rate High→Low</option>
+            <option value="Rate-Low">Tax Rate Low→High</option>
+            <option value="Stock-High">Stock High→Low</option>
+            <option value="Stock-Low">Stock Low→High</option>
+          </select>
+          <span className="prd-results-count">Showing {paginatedProducts.length} of {sortedProducts.length}</span>
         </div>
 
-        {apiError && <div className="products-error">{apiError}</div>}
+        {apiError && <div className="prd-api-error">{apiError}</div>}
 
-        <div className="products-table-wrap">
-          <table className="products-table">
+        <div className="prd-tbl-wrap">
+          <table className="prd-table">
             <thead>
               <tr>
-                <th>Tracking No</th>
-                <th>Product Name</th>
-                <th>Tax Rate</th>
-                <th>In Stock</th>
+                <th className="prd-th-check">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAll}
+                    style={{ accentColor: '#F05C44' }}
+                  />
+                </th>
+                <th>
+                  <div className="prd-th-inner">
+                    Product
+                    <span className="prd-sort-ico">
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="20" x2="12" y2="4"/>
+                        <polyline points="6 10 12 4 18 10"/>
+                      </svg>
+                    </span>
+                  </div>
+                </th>
                 <th>HS Code</th>
-                <th>UOM</th>
+                <th>Tax Rate</th>
+                <th>UoM</th>
+                <th>In Stock</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading.fetch ? (
-                <tr>
-                  <td colSpan="8" className="products-empty-cell"><Spinner sm /> Loading products...</td>
-                </tr>
+                <tr><td colSpan="8" className="prd-empty-cell"><Spinner /> Loading products…</td></tr>
               ) : paginatedProducts.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="products-empty-cell">No products found</td>
-                </tr>
+                <tr><td colSpan="8" className="prd-empty-cell">No products found</td></tr>
               ) : (
-                paginatedProducts.map((product) => (
-                  <tr key={product.id}>
-                    <td className="products-ref">#{product.id}</td>
-                    <td>
-                      <strong>{productName(product) || '-'}</strong>
-                      <span>{productSaleType(product) || 'No sale type set'}</span>
-                    </td>
-                    <td>{productRate(product) !== '' ? `${productRate(product)}%` : '-'}</td>
-                    <td>{productStock(product) || '-'}</td>
-                    <td className="products-ref">{productHsCode(product) || '-'}</td>
-                    <td>{productUom(product) || '-'}</td>
-                    <td><span className={`products-status ${productStatus(product) === 'Active' ? 'success' : 'neutral'}`}>{productStatus(product)}</span></td>
-                    <td>
-                      <div className="products-row-actions">
-                        <button
-                          className="products-icon-action success"
-                          aria-label="View product"
-                          onClick={() => handleShowModal(product.id, true)}
-                          disabled={loading.fetchSingleView}
-                        >
-                          {loading.fetchSingleView ? <Spinner sm /> : <LuEye />}
-                        </button>
-                        <button
-                          className="products-icon-action primary"
-                          aria-label="Edit product"
-                          onClick={() => handleShowModal(product.id, false)}
-                          disabled={loading.fetchSingleEdit}
-                        >
-                          {loading.fetchSingleEdit ? <Spinner sm /> : <FiEdit />}
-                        </button>
-                        <button
-                          className="products-icon-action danger"
-                          aria-label="Delete product"
-                          onClick={() => handleDelete(product.id)}
-                          disabled={loading.delete}
-                        >
-                          {loading.delete ? <Spinner sm /> : <FiTrash2 />}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                paginatedProducts.map(product => {
+                  const init = initialsOf(productName(product));
+                  const tone = toneFor(product.id, productName(product));
+                  const stockRaw = productStock(product);
+                  const stockNum = (stockRaw === '' || stockRaw == null) ? null : parseInt(stockRaw, 10);
+                  const oos = stockNum === 0;
+                  const dStatus = getDisplayStatus(product);
+                  const isSelected = selectedIds.includes(product.id);
+                  return (
+                    <tr key={product.id} className={isSelected ? 'prd-row-sel' : ''}>
+                      <td className="prd-td-check">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOne(product.id)}
+                          style={{ accentColor: '#F05C44' }}
+                        />
+                      </td>
+                      <td>
+                        <div className="prd-name-cell">
+                          <div className={`prd-row-avatar ${tone}`}>{init}</div>
+                          <div>
+                            <div className="prd-row-name">{productName(product) || '—'}</div>
+                            <div className="prd-row-sub">{productSaleType(product) || productHsCode(product) || '—'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td><span className="prd-mono">{productHsCode(product) || '—'}</span></td>
+                      <td>
+                        {productRate(product) !== '' && productRate(product) !== null
+                          ? <span className="prd-badge b-info">{productRate(product)}%</span>
+                          : <span className="prd-badge b-neutral">0%</span>
+                        }
+                      </td>
+                      <td>{productUom(product) || '—'}</td>
+                      <td>
+                        <span style={{ fontWeight: 700, color: oos ? '#DC2626' : '#1A1D23' }}>
+                          {stockNum === null ? '∞' : stockNum.toLocaleString()}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`prd-badge ${dStatus === 'Active' ? 'b-ok' : dStatus === 'Out of Stock' ? 'b-bad' : 'b-neutral'}`}>
+                          {dStatus}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="prd-acts">
+                          <button className="prd-act-btn" title="View" onClick={() => setViewingProduct(product)}>
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                          </button>
+                          <button className="prd-act-btn" title="Edit" onClick={() => handleShowModal(product.id, false)} disabled={loading.fetchSingleEdit}>
+                            {loading.fetchSingleEdit ? <Spinner /> : (
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                              </svg>
+                            )}
+                          </button>
+                          <button className="prd-act-btn danger" title="Delete" onClick={() => handleDelete(product.id)} disabled={loading.delete}>
+                            {loading.delete ? <Spinner /> : (
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-1 14H6L5 6"/>
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="products-pagination">
-            {[...Array(totalPages)].map((_, i) => (
-              <button
-                key={i}
-                className={i + 1 === currentPage ? 'active' : ''}
-                onClick={() => setCurrentPage(i + 1)}
-              >
-                {i + 1}
-              </button>
-            ))}
+        {/* Pagination */}
+        <div className="prd-pager">
+          <span className="prd-pager-info">
+            {sortedProducts.length > 0
+              ? `Showing ${(currentPage - 1) * itemsPerPage + 1}–${Math.min(currentPage * itemsPerPage, sortedProducts.length)} of ${sortedProducts.length} products`
+              : '0 products'}
+          </span>
+          {totalPages > 1 && (
+            <div className="prd-pager-btns">
+              <button className="prd-pg-btn" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</button>
+              {[...Array(Math.min(totalPages, 5))].map((_, i) => (
+                <button key={i + 1} className={`prd-pg-btn${currentPage === i + 1 ? ' on' : ''}`} onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+              ))}
+              {totalPages > 5 && (
+                <>
+                  <span style={{ padding: '0 3px', color: '#9CA3AF', fontSize: 12 }}>…</span>
+                  <button className={`prd-pg-btn${currentPage === totalPages ? ' on' : ''}`} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                </>
+              )}
+              <button className="prd-pg-btn" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>›</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Slide-in detail panel */}
+      <div className={`prd-overlay${viewingProduct ? ' open' : ''}`} onClick={() => setViewingProduct(null)} />
+      <div className={`prd-panel${viewingProduct ? ' open' : ''}`}>
+        <div className="prd-dp-hdr">
+          <div>
+            <div className="prd-dp-title">Product Details</div>
+            <div className="prd-dp-sub">HS code &amp; tax mapping</div>
+          </div>
+          <button className="prd-dp-close" onClick={() => setViewingProduct(null)}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        {viewingProduct && (
+          <div className="prd-dp-body">
+            <div className="prd-dp-avatar-wrap">
+              <div className={`prd-dp-avatar ${toneFor(viewingProduct.id, productName(viewingProduct))}`}>
+                {initialsOf(productName(viewingProduct))}
+              </div>
+              <div className="prd-dp-av-name">{productName(viewingProduct)}</div>
+              <div className="prd-dp-av-type">
+                <span
+                  className={`prd-badge ${getDisplayStatus(viewingProduct) === 'Active' ? 'b-ok' : getDisplayStatus(viewingProduct) === 'Out of Stock' ? 'b-bad' : 'b-neutral'}`}
+                  style={{ fontSize: 11 }}
+                >
+                  {getDisplayStatus(viewingProduct)}
+                </span>
+              </div>
+            </div>
+            <div className="prd-dp-section">
+              <div className="prd-dp-section-title">Classification</div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">HS Code</span>
+                <span className="prd-dp-row-val prd-mono">{productHsCode(viewingProduct) || '—'}</span>
+              </div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">HS Description</span>
+                <span className="prd-dp-row-val" style={{ maxWidth: 200, textAlign: 'right' }}>{productDescription(viewingProduct) || '—'}</span>
+              </div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">SRO Schedule</span>
+                <span className="prd-dp-row-val prd-mono">{viewingProduct.sro_schedule_no || viewingProduct.sroScheduleNo || '—'}</span>
+              </div>
+            </div>
+            <div className="prd-dp-section">
+              <div className="prd-dp-section-title">Pricing &amp; Tax</div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">Sales Tax Rate</span>
+                <span className="prd-dp-row-val">{productRate(viewingProduct) !== '' ? `${productRate(viewingProduct)}%` : '0%'}</span>
+              </div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">Unit of Measure</span>
+                <span className="prd-dp-row-val">{productUom(viewingProduct) || '—'}</span>
+              </div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">Sale Type</span>
+                <span className="prd-dp-row-val" style={{ maxWidth: 200, textAlign: 'right', fontSize: 12 }}>{productSaleType(viewingProduct) || '—'}</span>
+              </div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">Further Tax</span>
+                <span className="prd-dp-row-val">
+                  {(viewingProduct.further_tax_applicable || viewingProduct.furtherTaxApplicable) ? 'Applicable' : 'Not Applicable'}
+                </span>
+              </div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">Extra Tax</span>
+                <span className="prd-dp-row-val">
+                  {(viewingProduct.extra_tax_applicable || viewingProduct.extraTaxApplicable) ? 'Applicable' : 'Not Applicable'}
+                </span>
+              </div>
+            </div>
+            <div className="prd-dp-section">
+              <div className="prd-dp-section-title">Inventory</div>
+              <div className="prd-dp-row">
+                <span className="prd-dp-row-key">In Stock</span>
+                <span className="prd-dp-row-val">
+                  {productStock(viewingProduct) !== '' && productStock(viewingProduct) != null
+                    ? `${parseInt(productStock(viewingProduct), 10).toLocaleString()} units`
+                    : '∞ (unlimited)'}
+                </span>
+              </div>
+            </div>
           </div>
         )}
-      </section>
+        <div className="prd-dp-footer">
+          <button
+            className="prd-dp-btn-edit"
+            onClick={() => {
+              const id = viewingProduct?.id;
+              setViewingProduct(null);
+              if (id) handleShowModal(id, false);
+            }}
+          >Edit Product</button>
+          <button className="prd-dp-btn-del" onClick={() => viewingProduct && handleDelete(viewingProduct.id)}>Delete</button>
+        </div>
+      </div>
 
-      <div className="modal fade products-modal-shell" id="customerModal" tabIndex="-1" aria-hidden="true" ref={modalRef}>
+      {/* Bulk action bar */}
+      <div className={`prd-bulk-bar${selectedIds.length > 0 ? ' show' : ''}`}>
+        <span className="prd-bulk-count">{selectedIds.length} selected</span>
+        <div className="prd-bulk-sep" />
+        <button className="prd-bulk-btn primary" onClick={() => downloadProductsCsv(products.filter(p => selectedIds.includes(p.id)))}>
+          Export Selected
+        </button>
+        <button className="prd-bulk-btn ghost" onClick={handleBulkMarkInactive}>Mark Inactive</button>
+        <button className="prd-bulk-btn danger" onClick={handleBulkDelete}>Delete</button>
+        <button className="prd-bulk-close" onClick={() => setSelectedIds([])}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Bootstrap modal – add / edit */}
+      <div className="modal fade prd-modal-shell" id="productModal" tabIndex="-1" aria-hidden="true" ref={modalRef}>
         <div className="modal-dialog modal-xl modal-dialog-centered">
-          <div className="modal-content products-modal">
-            <div className="products-modal__header">
+          <div className="modal-content prd-modal">
+            <div className="prd-modal__header">
               <div>
                 <span>Product Mapping</span>
                 <h2>{editingProduct ? (isReadOnly ? 'View Product' : 'Edit Product') : 'Add Product'}</h2>
               </div>
-              <button type="button" className="products-modal__close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
+              <button type="button" className="prd-modal__close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
             </div>
 
-            <div className="products-modal__body">
-              {apiError && <div className="products-error">{apiError}</div>}
-              {productNotice && <div className="products-notice">{productNotice}</div>}
-              {loading.fetchSingle && editingProduct ? (
-                <div className="products-modal-loading"><Spinner sm /> Loading product data...</div>
+            <div className="prd-modal__body">
+              {apiError && <div className="prd-api-error">{apiError}</div>}
+              {productNotice && <div className="prd-notice">{productNotice}</div>}
+              {loading.fetchSingle ? (
+                <div className="prd-modal-loading"><Spinner /> Loading product data…</div>
               ) : (
                 <>
-                  <div className="products-form-grid">
+                  <div className="prd-form-grid">
                     <label>
                       <span>Product Name</span>
                       <input name="product_name" value={formData.product_name} onChange={handleInputChange} disabled={isReadOnly} />
@@ -933,14 +1181,12 @@ function Products() {
                       <span>Unit of Measure</span>
                       <select name="unit_of_measure" value={formData.unit_of_measure} onChange={handleInputChange} disabled={isReadOnly}>
                         <option value="">Select Unit</option>
-                        {uomOptions.map((uom) => (
-                          <option key={uom.value} value={uom.value}>{uom.label}</option>
-                        ))}
+                        {uomOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                       </select>
                     </label>
-                    <label className="products-form-grid__wide products-hs-search-field">
+                    <label className="prd-form-grid__wide prd-hs-search-field">
                       <span>HS Code Search</span>
-                      <div className="products-hs-search-row">
+                      <div className="prd-hs-search-row">
                         <input
                           type="search"
                           value={hsSearch}
@@ -948,29 +1194,32 @@ function Products() {
                           disabled={isReadOnly}
                           placeholder="Search HS code or description"
                         />
-                        <button type="button" className="products-secondary-action" onClick={autofillFbrFields} disabled={isReadOnly || loading.autofill || !formData.hs_code}>
-                          {loading.autofill ? <Spinner sm /> : 'Autofill'}
+                        <button
+                          type="button"
+                          className="prd-btn-outline prd-btn-sm"
+                          onClick={autofillFbrFields}
+                          disabled={isReadOnly || loading.autofill || !formData.hs_code}
+                        >
+                          {loading.autofill ? <Spinner /> : 'Autofill'}
                         </button>
                       </div>
                       {hsSuggestions.length > 0 && (
-                        <div className="products-hs-suggestions">
-                          {hsSuggestions.map((suggestion) => (
-                            <button key={suggestion.hsCode} type="button" onClick={() => selectHsSuggestion(suggestion)}>
-                              <strong>{suggestion.hsCode}</strong>
-                              <span>{suggestion.description}</span>
+                        <div className="prd-hs-suggestions">
+                          {hsSuggestions.map(s => (
+                            <button key={s.hsCode} type="button" onClick={() => selectHsSuggestion(s)}>
+                              <strong>{s.hsCode}</strong>
+                              <span>{s.description}</span>
                             </button>
                           ))}
                         </div>
                       )}
-                      {loading.hsSearch && <small>Searching FBR references...</small>}
+                      {loading.hsSearch && <small>Searching FBR references…</small>}
                     </label>
                     <label>
                       <span>HS Code</span>
                       <select name="hs_code" value={formData.hs_code} onChange={handleInputChange} disabled={isReadOnly}>
                         <option value="">Select HS Code</option>
-                        {hsCodeOptions.map((hsCode) => (
-                          <option key={hsCode.value} value={hsCode.value}>{hsCode.label}</option>
-                        ))}
+                        {hsCodeOptions.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
                       </select>
                     </label>
                     <label>
@@ -984,20 +1233,18 @@ function Products() {
                         <option value="Inactive">Inactive</option>
                       </select>
                     </label>
-                    <label className="products-form-grid__wide">
+                    <label className="prd-form-grid__wide">
                       <span>Description</span>
-                      <textarea name="description" value={formData.description} onChange={handleInputChange} disabled={isReadOnly} />
+                      <textarea name="description" value={formData.description} onChange={handleInputChange} disabled={isReadOnly} rows={3} />
                     </label>
-                    <label className="products-form-grid__wide">
+                    <label className="prd-form-grid__wide">
                       <span>Sale Type</span>
                       <select name="sale_type" value={formData.sale_type} onChange={handleInputChange} disabled={isReadOnly}>
                         <option value="">Select Sale Type</option>
-                        {saleTypeOptions.map((saleType) => (
-                          <option key={saleType.value} value={saleType.value}>{saleType.label}</option>
-                        ))}
+                        {saleTypeOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                       </select>
                     </label>
-                    <label className="products-form-grid__wide">
+                    <label className="prd-form-grid__wide">
                       <span>SRO Schedule No</span>
                       <input name="sro_schedule_no" value={formData.sro_schedule_no} onChange={handleInputChange} disabled={isReadOnly} />
                     </label>
@@ -1012,25 +1259,13 @@ function Products() {
                     <option value="Sales Tax,Extra Tax">Sales Tax, Extra Tax</option>
                   </select>
 
-                  <div className="products-check-grid">
+                  <div className="prd-check-grid">
                     <label>
-                      <input
-                        type="checkbox"
-                        name="further_tax_applicable"
-                        checked={formData.further_tax_applicable}
-                        onChange={handleInputChange}
-                        disabled={isReadOnly}
-                      />
+                      <input type="checkbox" name="further_tax_applicable" checked={formData.further_tax_applicable} onChange={handleInputChange} disabled={isReadOnly} />
                       <span>Further Tax Applicable</span>
                     </label>
                     <label>
-                      <input
-                        type="checkbox"
-                        name="extra_tax_applicable"
-                        checked={formData.extra_tax_applicable}
-                        onChange={handleInputChange}
-                        disabled={isReadOnly}
-                      />
+                      <input type="checkbox" name="extra_tax_applicable" checked={formData.extra_tax_applicable} onChange={handleInputChange} disabled={isReadOnly} />
                       <span>Extra Tax Applicable</span>
                     </label>
                   </div>
@@ -1038,22 +1273,23 @@ function Products() {
               )}
             </div>
 
-            <div className="products-modal__footer">
-              <button type="button" className="products-secondary-action" data-bs-dismiss="modal">Cancel</button>
+            <div className="prd-modal__footer">
+              <button type="button" className="prd-btn-outline" data-bs-dismiss="modal">Cancel</button>
               {!isReadOnly && (
                 <button
                   type="button"
-                  className="products-primary-action"
+                  className="prd-btn-primary"
                   onClick={editingProduct ? handleUpdate : handleSave}
                   disabled={loading.add || loading.edit}
                 >
-                  {loading.add || loading.edit ? <Spinner sm /> : (editingProduct ? 'Update' : 'Save')}
+                  {loading.add || loading.edit ? <Spinner /> : editingProduct ? 'Update' : 'Save'}
                 </button>
               )}
             </div>
           </div>
         </div>
       </div>
+
     </div>
   );
 }

@@ -29,11 +29,12 @@ import './AppShell.css';
 import OnboardingWorkspace from './Pages/OnboardingWorkspace';
 import InvitationAcceptance from './Pages/InvitationAcceptance';
 import { CompanyProvider } from './contexts/CompanyContext';
+import { getToken } from './services/companySession';
 
 const SIDEBAR_OVERLAY_BREAKPOINT = 900;
 
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem('token');
+  const token = getToken();
   const location = useLocation();
   if (!token) {
     const from = `${location.pathname}${location.search}${location.hash}`;
@@ -43,7 +44,7 @@ function ProtectedRoute({ children }) {
 }
 
 function PublicOnlyRoute({ children }) {
-  const token = localStorage.getItem('token');
+  const token = getToken();
   if (token) return <Navigate to="/dashboard" replace />;
   return children;
 }

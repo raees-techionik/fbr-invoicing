@@ -1,7 +1,7 @@
 .app-shell {
   --system-banner-height: 36px;
   min-height: 100vh;
-  background: #eef3f7;
+  background: linear-gradient(145deg, #eef1fb 0%, #f5f6fa 38%, #fdf0ee 72%, #f5f6fa 100%);
 }
 
 .app-shell > .main-content {

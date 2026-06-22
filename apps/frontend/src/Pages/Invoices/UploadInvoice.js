@@ -261,6 +261,16 @@ export default function UploadInvoice() {
         </div>
       </div>
 
+      <div className="upload-invoice-steps">
+        <div className="upload-invoice-step active"><div className="upload-invoice-step__dot">1</div><span>Upload File</span></div>
+        <div className="upload-invoice-step__line" />
+        <div className="upload-invoice-step"><div className="upload-invoice-step__dot">2</div><span>Validate</span></div>
+        <div className="upload-invoice-step__line" />
+        <div className="upload-invoice-step"><div className="upload-invoice-step__dot">3</div><span>Review &amp; Confirm</span></div>
+        <div className="upload-invoice-step__line" />
+        <div className="upload-invoice-step"><div className="upload-invoice-step__dot">4</div><span>Submit</span></div>
+      </div>
+
       <div className="upload-invoice-summary">
         <div>
           <span>File type</span>

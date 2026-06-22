@@ -11,6 +11,7 @@ import {
   FiHome,
   FiPlus,
   FiSettings,
+  FiTool,
   FiUpload,
   FiUser,
   FiUsers,
@@ -24,41 +25,68 @@ import { clearCompanySession } from '../services/companySession';
 
 const SIDEBAR_OVERLAY_BREAKPOINT = 900;
 
+const navSections = [
+  {
+    label: 'Main',
+    items: [
+      { name: 'Dashboard', path: '/dashboard', icon: <FiHome /> },
+      {
+        name: 'Invoices',
+        path: '/invoice',
+        icon: <FiFileText />,
+        subItems: [
+          { name: 'Add Invoice', path: '/invoice/add', icon: <FiPlus /> },
+          { name: 'Upload Invoice', path: '/invoice/upload', icon: <FiUpload /> },
+          { name: 'Offline Queue', path: '/invoice/offline-queue', icon: <MdOutlineWifiOff /> },
+        ],
+      },
+      { name: 'Customers', path: '/customers', icon: <FiUsers /> },
+    ],
+  },
+  {
+    label: 'Catalog',
+    items: [
+      { name: 'Services', path: '/services', icon: <FiTool /> },
+      { name: 'Products', path: '/products', icon: <BsBox /> },
+    ],
+  },
+  {
+    label: 'Organization',
+    items: [
+      { name: 'Staff', path: '/staff', icon: <MdPeopleAlt /> },
+      { name: 'Company Profile', path: '/company-profile', icon: <FiUser /> },
+    ],
+  },
+  {
+    label: 'FBR Integration',
+    items: [
+      { name: 'Sandbox', path: '/sandbox', icon: <MdBiotech /> },
+      { name: 'Settings', path: '/settings', icon: <FiSettings /> },
+      { name: 'Onboarding', path: '/onboarding', icon: <FiCheckSquare /> },
+    ],
+  },
+  {
+    label: 'Help',
+    items: [
+      { name: 'Support', path: '/support', icon: <FaCircleQuestion /> },
+    ],
+  },
+];
+
 function Sidebar({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) {
   const [expandedItems, setExpandedItems] = useState({});
   const location = useLocation();
   const navigate = useNavigate();
-
-  const menuItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: <FiHome /> },
-    {
-      name: 'Invoices',
-      path: '/invoice',
-      icon: <FiFileText />,
-      subItems: [
-        { name: 'Add Invoice', path: '/invoice/add', icon: <FiPlus /> },
-        { name: 'Upload Invoice', path: '/invoice/upload', icon: <FiUpload /> },
-        { name: 'Offline Queue', path: '/invoice/offline-queue', icon: <MdOutlineWifiOff /> },
-      ],
-    },
-    { name: 'Company', path: '/company-profile', icon: <FiUser /> },
-    { name: 'Onboarding', path: '/onboarding', icon: <FiCheckSquare /> },
-    { name: 'Customers', path: '/customers', icon: <FiUsers /> },
-    { name: 'Services', path: '/services', icon: <FiSettings /> },
-    { name: 'Products', path: '/products', icon: <BsBox /> },
-    { name: 'Staff', path: '/staff', icon: <MdPeopleAlt /> },
-    { name: 'Sandbox', path: '/sandbox', icon: <MdBiotech /> },
-  ];
 
   const isItemActive = (item) => {
     if (!item.subItems) return location.pathname === item.path;
     return location.pathname.startsWith(item.path);
   };
 
-  const toggleItem = (index) => {
+  const toggleItem = (key) => {
     setExpandedItems((prev) => ({
       ...prev,
-      [index]: !prev[index],
+      [key]: !prev[key],
     }));
   };
 
@@ -71,6 +99,7 @@ function Sidebar({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) {
   const logout = () => {
     localStorage.removeItem('email');
     localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     clearCompanySession();
     navigate('/');
   };
@@ -99,9 +128,6 @@ function Sidebar({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) {
           <>
             <img src={icon} alt="Techionik" className="app-sidebar__brand-logo" />
             <span className="app-sidebar__brand-title">Digital Invoicing</span>
-            <span className="app-sidebar__brand-powered">
-              Powered by <strong>TECHIONIK</strong>
-            </span>
           </>
         )}
       </NavLink>
@@ -109,86 +135,71 @@ function Sidebar({ isOpen, toggleSidebar, isCollapsed, toggleCollapse }) {
       <CompanySwitcher isCollapsed={isCollapsed} />
 
       <nav className="app-sidebar__nav" aria-label="Main navigation">
-        {menuItems.map((item, index) => (
-          <div className="app-sidebar__nav-group" key={item.name}>
-            {item.subItems ? (
-              <>
-                <div className={`app-sidebar__nav-link ${isItemActive(item) ? 'active' : ''}`}>
+        {navSections.map((section) => (
+          <div className="app-sidebar__nav-section" key={section.label}>
+            {!isCollapsed && <div className="app-sidebar__nav-label">{section.label}</div>}
+            {section.items.map((item) => (
+              <div className="app-sidebar__nav-group" key={item.name}>
+                {item.subItems ? (
+                  <>
+                    <div className={`app-sidebar__nav-link ${isItemActive(item) ? 'active' : ''}`}>
+                      <NavLink
+                        to={item.path}
+                        onClick={handleNavigate}
+                        className="app-sidebar__nav-main"
+                        title={isCollapsed ? item.name : undefined}
+                      >
+                        <span className="app-sidebar__nav-icon">{item.icon}</span>
+                        <span className="app-sidebar__nav-label-text">{item.name}</span>
+                      </NavLink>
+                      {!isCollapsed && (
+                        <button
+                          className="app-sidebar__submenu-toggle"
+                          type="button"
+                          onClick={() => toggleItem(item.name)}
+                          aria-label={`${expandedItems[item.name] ? 'Collapse' : 'Expand'} ${item.name}`}
+                        >
+                          {expandedItems[item.name] || location.pathname.startsWith(item.path) ? <FiChevronDown /> : <FiChevronRight />}
+                        </button>
+                      )}
+                    </div>
+
+                    {!isCollapsed && (expandedItems[item.name] || location.pathname.startsWith(item.path)) && (
+                      <div className="app-sidebar__submenu">
+                        {item.subItems.map((subItem) => (
+                          <NavLink
+                            key={subItem.path}
+                            to={subItem.path}
+                            onClick={handleNavigate}
+                            className={({ isActive }) => `app-sidebar__submenu-link ${isActive ? 'active' : ''}`}
+                          >
+                            <span>{subItem.icon}</span>
+                            {subItem.name}
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <NavLink
                     to={item.path}
                     onClick={handleNavigate}
-                    className="app-sidebar__nav-main"
+                    className={({ isActive }) => `app-sidebar__nav-link ${isActive ? 'active' : ''}`}
                     title={isCollapsed ? item.name : undefined}
+                    end
                   >
                     <span className="app-sidebar__nav-icon">{item.icon}</span>
-                    <span className="app-sidebar__nav-label">{item.name}</span>
+                    <span className="app-sidebar__nav-label-text">{item.name}</span>
                   </NavLink>
-                  {!isCollapsed && (
-                    <button
-                      className="app-sidebar__submenu-toggle"
-                      type="button"
-                      onClick={() => toggleItem(index)}
-                      aria-label={`${expandedItems[index] ? 'Collapse' : 'Expand'} ${item.name}`}
-                    >
-                      {expandedItems[index] || location.pathname.startsWith(item.path) ? <FiChevronDown /> : <FiChevronRight />}
-                    </button>
-                  )}
-                </div>
-
-                {!isCollapsed && (expandedItems[index] || location.pathname.startsWith(item.path)) && (
-                  <div className="app-sidebar__submenu">
-                    {item.subItems.map((subItem) => (
-                      <NavLink
-                        key={subItem.path}
-                        to={subItem.path}
-                        onClick={handleNavigate}
-                        className={({ isActive }) => `app-sidebar__submenu-link ${isActive ? 'active' : ''}`}
-                      >
-                        <span>{subItem.icon}</span>
-                        {subItem.name}
-                      </NavLink>
-                    ))}
-                  </div>
                 )}
-              </>
-            ) : (
-              <NavLink
-                to={item.path}
-                onClick={handleNavigate}
-                className={({ isActive }) => `app-sidebar__nav-link ${isActive ? 'active' : ''}`}
-                title={isCollapsed ? item.name : undefined}
-                end
-              >
-                <span className="app-sidebar__nav-icon">{item.icon}</span>
-                <span className="app-sidebar__nav-label">{item.name}</span>
-              </NavLink>
-            )}
+              </div>
+            ))}
           </div>
         ))}
       </nav>
 
       <div className="app-sidebar__footer">
         <div className="app-sidebar__utility">
-          <NavLink
-            to="/settings"
-            onClick={handleNavigate}
-            className={({ isActive }) => `app-sidebar__utility-link ${isActive ? 'active' : ''}`}
-            title={isCollapsed ? 'Settings' : undefined}
-          >
-            <FiSettings />
-            <span>Settings</span>
-          </NavLink>
-
-          <NavLink
-            to="/support"
-            onClick={handleNavigate}
-            className={({ isActive }) => `app-sidebar__utility-link ${isActive ? 'active' : ''}`}
-            title={isCollapsed ? 'Support' : undefined}
-          >
-            <FaCircleQuestion />
-            <span>Support</span>
-          </NavLink>
-
           <button className="app-sidebar__utility-link" type="button" onClick={logout} title={isCollapsed ? 'Log out' : undefined}>
             <MdLogout />
             <span>Log out</span>

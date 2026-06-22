@@ -5,7 +5,8 @@ import {
   FiCheckCircle,
   FiCloud,
   FiCopy,
-  FiCpu,
+  FiEye,
+  FiEyeOff,
   FiRefreshCw,
   FiSave,
   FiServer,
@@ -44,8 +45,8 @@ function StatusBadge({ status }) {
   const Icon = meta.Icon;
 
   return (
-    <span className={`settings-status-badge ${meta.tone}`}>
-      <Icon size={14} />
+    <span className={`settings-badge ${meta.tone}`}>
+      <Icon size={12} />
       {meta.label}
     </span>
   );
@@ -60,13 +61,12 @@ function formatDateTime(value) {
 
 function TokenStatusRow({ title, status }) {
   return (
-    <div className="settings-status-row">
-      <div>
-        <strong>{title}</strong>
-        <span>{status?.message || "Not checked"}</span>
-        {status?.checkedAt && <small>Checked {formatDateTime(status.checkedAt)}</small>}
+    <div className="settings-row">
+      <span className="settings-row__key">{title}</span>
+      <div className="settings-row__val-stack">
+        <StatusBadge status={status?.status} />
+        {status?.checkedAt && <small>{formatDateTime(status.checkedAt)}</small>}
       </div>
-      <StatusBadge status={status?.status} />
     </div>
   );
 }
@@ -92,6 +92,8 @@ function Settings() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showSandboxToken, setShowSandboxToken] = useState(false);
+  const [showProductionToken, setShowProductionToken] = useState(false);
 
   const loadSettings = useCallback(async ({ checkLive = false } = {}) => {
     setLoading(true);
@@ -254,41 +256,65 @@ function Settings() {
   const sandboxTokenConfigured = Boolean(settings?.tokens?.sandbox?.configured);
   const productionTokenConfigured = Boolean(settings?.tokens?.production?.configured);
 
+  const readinessSteps = [
+    {
+      key: "env",
+      ok: settings?.environment === "sandbox",
+      title: "1. Use sandbox environment",
+      desc: settings?.environment === "sandbox" ? "Sandbox is selected." : "Switch environment to Sandbox.",
+    },
+    {
+      key: "mock",
+      ok: !settings?.useMock,
+      title: "2. Disable mock mode",
+      desc: settings?.useMock ? "Mock mode is still on, so FBR will be bypassed." : "Live FBR calls are enabled.",
+    },
+    {
+      key: "token",
+      ok: sandboxTokenConfigured,
+      title: "3. Add sandbox token",
+      desc: sandboxTokenConfigured ? "Sandbox token is stored for this company." : "Paste the FBR sandbox token below.",
+    },
+    {
+      key: "ip",
+      ok: Boolean(preflight?.checks?.find((check) => check.id === "ip-whitelist")?.passed),
+      title: "4. Whitelist outbound IP",
+      desc: outboundIp?.publicIp ? `Send ${outboundIp.publicIp} to FBR/PRAL.` : "Outbound IP is unavailable.",
+    },
+  ];
+
   return (
     <div className="settings-page">
-      <header className="settings-header">
-        <div>
-          <span>FBR control center</span>
-          <h1>Settings</h1>
+      <div className="settings-page-hdr">
+        <div className="settings-page-hdr__text">
+          <h2>FBR Settings</h2>
           <p>Manage token storage, submission mode, and readiness signals used by invoice submission.</p>
         </div>
-        <div className="settings-header__actions">
-          <button className="settings-secondary-action" type="button" onClick={() => loadSettings()} disabled={loading || saving}>
-            {loading ? <Spinner /> : <FiRefreshCw size={16} />}
+        <div className="settings-page-hdr__actions">
+          <button className="settings-btn-outline" type="button" onClick={() => loadSettings()} disabled={loading || saving}>
+            {loading ? <Spinner /> : <FiRefreshCw size={14} />}
             Refresh
           </button>
-          <button className="settings-secondary-action" type="button" onClick={() => refreshTokenStatus()} disabled={refreshingStatus}>
-            {refreshingStatus ? <Spinner /> : <FiActivity size={16} />}
-            Status
+          <button className="settings-btn-outline" type="button" onClick={() => refreshTokenStatus()} disabled={refreshingStatus}>
+            {refreshingStatus ? <Spinner /> : <FiActivity size={14} />}
+            Check Status
           </button>
         </div>
-      </header>
+      </div>
 
       {message && (
         <div className="settings-alert success">
+          <FiCheckCircle size={16} />
           <span>{message}</span>
-          <button type="button" onClick={() => setMessage("")} aria-label="Dismiss message">
-            <FiX size={18} />
-          </button>
+          <button type="button" onClick={() => setMessage("")} aria-label="Dismiss message"><FiX size={15} /></button>
         </div>
       )}
 
       {error && (
         <div className="settings-alert danger">
+          <FiAlertTriangle size={16} />
           <span>{error}</span>
-          <button type="button" onClick={() => setError("")} aria-label="Dismiss error">
-            <FiX size={18} />
-          </button>
+          <button type="button" onClick={() => setError("")} aria-label="Dismiss error"><FiX size={15} /></button>
         </div>
       )}
 
@@ -299,328 +325,275 @@ function Settings() {
         </div>
       ) : (
         <>
-          <section className="settings-stat-grid" aria-label="Settings summary">
-            <article>
-              <span>Active Environment</span>
+          <section className="settings-mini-stats" aria-label="Settings summary">
+            <div className="settings-mini-card">
+              <span className="settings-mini-card__label">Active Environment</span>
               <strong>{savedEnvironmentLabel}</strong>
               <small>{settings?.environment === "production" ? "Live FBR submission" : "Sandbox validation"}</small>
-            </article>
-            <article>
-              <span>Connection Mode</span>
-              <strong className={settings?.useMock ? "warning" : "success"}>{settings?.useMock ? "Mock" : "Live"}</strong>
+            </div>
+            <div className="settings-mini-card">
+              <span className="settings-mini-card__label">Connection Mode</span>
+              <strong className={settings?.useMock ? "tone-warning" : "tone-success"}>{settings?.useMock ? "Mock" : "Live"}</strong>
               <small>{settings?.useMock ? "Local invoice numbers" : "FBR API enabled"}</small>
-            </article>
-            <article>
-              <span>Selected Token</span>
+            </div>
+            <div className="settings-mini-card">
+              <span className="settings-mini-card__label">Selected Token</span>
               <strong>{selectedToken?.configured ? "Configured" : "Missing"}</strong>
               <small>{selectedToken?.masked || `${environmentLabel} token required`}</small>
-            </article>
-            <article>
-              <span>Live Sandbox</span>
-              <strong className={liveSandboxReady ? "success" : "danger"}>{liveSandboxReady ? "Ready" : "Blocked"}</strong>
+            </div>
+            <div className="settings-mini-card">
+              <span className="settings-mini-card__label">Live Sandbox</span>
+              <strong className={liveSandboxReady ? "tone-success" : "tone-danger"}>{liveSandboxReady ? "Ready" : "Blocked"}</strong>
               <small>{preflight ? `${preflight.summary.blockingIssues} blocking issue${preflight.summary.blockingIssues === 1 ? "" : "s"}` : "Preflight pending"}</small>
-            </article>
-            <article>
-              <span>Outbound IP</span>
-              <strong>{outboundIp?.publicIp || "Unavailable"}</strong>
+            </div>
+            <div className="settings-mini-card">
+              <span className="settings-mini-card__label">Outbound IP</span>
+              <strong className="mono">{outboundIp?.publicIp || "Unavailable"}</strong>
               <small>{outboundIp?.source || "Whitelist status unknown"}</small>
-            </article>
+            </div>
           </section>
 
-          <section className={`settings-panel settings-readiness-panel ${liveSandboxReady ? "ready" : "blocked"}`}>
-            <div className="settings-panel__top">
-              <div>
-                <h2>Live Sandbox Readiness</h2>
-                <p>
-                  {liveSandboxReady
-                    ? "This company can attempt live FBR sandbox validation from the Sandbox page."
-                    : "Complete the blocking items before trying real FBR sandbox validation."}
-                </p>
-              </div>
-              <span className={`settings-readiness-score ${liveSandboxReady ? "success" : "danger"}`}>
-                {preflight ? `${preflight.summary.passedChecks}/${preflight.summary.totalChecks}` : "0/0"} ready
+          <section className="settings-env-tabs">
+            <button
+              type="button"
+              className={`settings-env-tab sandbox ${formData.environment === "sandbox" ? "active" : ""}`}
+              onClick={() => setFormData((prev) => ({ ...prev, environment: "sandbox" }))}
+              aria-pressed={formData.environment === "sandbox"}
+            >
+              <span className="settings-env-tab__icon"><FiServer size={18} /></span>
+              <span className="settings-env-tab__text">
+                <strong>Sandbox Environment</strong>
+                <small>For testing before going live</small>
               </span>
-            </div>
-
-            <div className="settings-readiness-steps">
-              <article className={settings?.environment === "sandbox" ? "success" : "danger"}>
-                <strong>1. Use sandbox environment</strong>
-                <span>{settings?.environment === "sandbox" ? "Sandbox is selected." : "Switch environment to Sandbox."}</span>
-              </article>
-              <article className={!settings?.useMock ? "success" : "danger"}>
-                <strong>2. Disable mock mode</strong>
-                <span>{settings?.useMock ? "Mock mode is still on, so FBR will be bypassed." : "Live FBR calls are enabled."}</span>
-              </article>
-              <article className={sandboxTokenConfigured ? "success" : "danger"}>
-                <strong>3. Add sandbox token</strong>
-                <span>{sandboxTokenConfigured ? "Sandbox token is stored for this company." : "Paste the FBR sandbox token below."}</span>
-              </article>
-              <article className={preflight?.checks?.find((check) => check.id === "ip-whitelist")?.passed ? "success" : "danger"}>
-                <strong>4. Whitelist outbound IP</strong>
-                <span>{outboundIp?.publicIp ? `Send ${outboundIp.publicIp} to FBR/PRAL.` : "Outbound IP is unavailable."}</span>
-              </article>
-            </div>
-
-            {(blockingChecks.length > 0 || warningChecks.length > 0) && (
-              <div className="settings-readiness-issues">
-                {blockingChecks.map((check) => (
-                  <div key={check.id} className="danger">
-                    <FiXCircle size={16} />
-                    <span><strong>{check.label}</strong>{check.action}</span>
-                  </div>
-                ))}
-                {warningChecks.map((check) => (
-                  <div key={check.id} className="warning">
-                    <FiAlertTriangle size={16} />
-                    <span><strong>{check.label}</strong>{check.action}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+              <StatusBadge status={sandboxStatus?.status} />
+            </button>
+            <button
+              type="button"
+              className={`settings-env-tab production ${formData.environment === "production" ? "active" : ""}`}
+              onClick={() => setFormData((prev) => ({ ...prev, environment: "production" }))}
+              aria-pressed={formData.environment === "production"}
+            >
+              <span className="settings-env-tab__icon"><FiCloud size={18} /></span>
+              <span className="settings-env-tab__text">
+                <strong>Production Environment</strong>
+                <small>Live FBR IRIS submissions</small>
+              </span>
+              <StatusBadge status={productionStatus?.status} />
+            </button>
           </section>
 
-          <section className="settings-workspace">
-            <form className="settings-panel settings-config-panel" onSubmit={handleSave}>
-              <div className="settings-panel__top">
-                <div>
-                  <h2>Submission Controls</h2>
-                  <p>These values decide how Add Invoice sends FBR payloads.</p>
-                </div>
-                <StatusBadge status={activeStatus?.status} />
-              </div>
-
-              <div className="settings-form-section">
-                <div className="settings-section-heading">
-                  <FiShield size={18} />
+          <section className="settings-grid">
+            <div className="settings-main">
+              <article className={`settings-card settings-readiness ${liveSandboxReady ? "ready" : "blocked"}`}>
+                <div className="settings-card__hdr">
                   <div>
-                    <strong>Environment</strong>
-                    <span>{formData.environment === "production" ? "Scenario IDs are removed before submission." : "Sandbox scenario IDs remain available."}</span>
+                    <h3>Live Sandbox Readiness</h3>
+                    <p>
+                      {liveSandboxReady
+                        ? "This company can attempt live FBR sandbox validation from the Sandbox page."
+                        : "Complete the blocking items before trying real FBR sandbox validation."}
+                    </p>
                   </div>
-                </div>
-
-                <div className="settings-segment" role="group" aria-label="FBR environment">
-                  <button
-                    type="button"
-                    className={formData.environment === "sandbox" ? "active" : ""}
-                    onClick={() => setFormData((prev) => ({ ...prev, environment: "sandbox" }))}
-                    aria-pressed={formData.environment === "sandbox"}
-                  >
-                    <FiServer size={16} />
-                    Sandbox
-                  </button>
-                  <button
-                    type="button"
-                    className={formData.environment === "production" ? "active" : ""}
-                    onClick={() => setFormData((prev) => ({ ...prev, environment: "production" }))}
-                    aria-pressed={formData.environment === "production"}
-                  >
-                    <FiCloud size={16} />
-                    Production
-                  </button>
-                </div>
-              </div>
-
-              <div className="settings-form-section">
-                <div className="settings-section-heading">
-                  <FiCpu size={18} />
-                  <div>
-                    <strong>FBR Connection</strong>
-                    <span>{formData.useMock ? "Mock mode is selected." : "Live FBR API calls are selected."}</span>
-                  </div>
-                </div>
-
-                <label className={`settings-toggle ${formData.useMock ? "mock" : "live"}`}>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    name="useMock"
-                    checked={formData.useMock}
-                    onChange={handleChange}
-                  />
-                  <span className="settings-toggle__track">
-                    <span />
+                  <span className={`settings-score ${liveSandboxReady ? "success" : "danger"}`}>
+                    {preflight ? `${preflight.summary.passedChecks}/${preflight.summary.totalChecks}` : "0/0"} ready
                   </span>
-                  <span className="settings-toggle__copy">
-                    <strong>{formData.useMock ? "Mock Mode" : "Live Mode"}</strong>
-                    <small>{formData.useMock ? "FBR is bypassed for generated invoice numbers." : "A valid token is required for submissions."}</small>
-                  </span>
-                </label>
+                </div>
 
-                {formData.useMock && (
-                  <div className="settings-inline-warning">
-                    <FiAlertTriangle size={17} />
-                    <span>Mock mode is safe for demos and local testing, but live sandbox certification requires this to be off.</span>
+                <div className="settings-card__body">
+                  <div className="settings-readiness-steps">
+                    {readinessSteps.map((step) => (
+                      <div className="settings-step" key={step.key}>
+                        <span className={`settings-step__icon ${step.ok ? "success" : "danger"}`}>
+                          {step.ok ? <FiCheckCircle size={14} /> : <FiXCircle size={14} />}
+                        </span>
+                        <div>
+                          <strong>{step.title}</strong>
+                          <span>{step.desc}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
 
-              <div className="settings-token-grid">
-                <article className="settings-token-card">
-                  <div className="settings-token-card__header">
-                    <div>
-                      <span>Sandbox Token</span>
-                      <strong>{settings?.tokens?.sandbox?.configured ? settings.tokens.sandbox.masked : "Not configured"}</strong>
-                      <small>Required for PRAL/FBR sandbox certification and the 13 live scenarios.</small>
+                  {(blockingChecks.length > 0 || warningChecks.length > 0) && (
+                    <div className="settings-issues">
+                      {blockingChecks.map((check) => (
+                        <div key={check.id} className="settings-issue danger">
+                          <FiXCircle size={14} />
+                          <span><strong>{check.label}</strong> {check.action}</span>
+                        </div>
+                      ))}
+                      {warningChecks.map((check) => (
+                        <div key={check.id} className="settings-issue warning">
+                          <FiAlertTriangle size={14} />
+                          <span><strong>{check.label}</strong> {check.action}</span>
+                        </div>
+                      ))}
                     </div>
-                    <StatusBadge status={sandboxStatus?.status} />
-                  </div>
-
-                  <label className="settings-field">
-                    <span>Replace sandbox token</span>
-                    <input
-                      type="password"
-                      name="sandboxToken"
-                      value={formData.sandboxToken}
-                      onChange={handleChange}
-                      placeholder={settings?.tokens?.sandbox?.configured ? "Enter a new token" : "Paste sandbox token"}
-                      autoComplete="new-password"
-                    />
-                  </label>
-
-                  {settings?.tokens?.sandbox?.configured && (
-                    <label className="settings-clear-check">
-                      <input
-                        type="checkbox"
-                        name="clearSandboxToken"
-                        checked={formData.clearSandboxToken}
-                        onChange={handleChange}
-                      />
-                      Remove stored sandbox token
-                    </label>
                   )}
-                </article>
+                </div>
+              </article>
 
-                <article className="settings-token-card">
-                  <div className="settings-token-card__header">
-                    <div>
-                      <span>Production Token</span>
-                      <strong>{settings?.tokens?.production?.configured ? settings.tokens.production.masked : "Not configured"}</strong>
-                      <small>Needed only after sandbox scenarios pass and FBR issues production access.</small>
-                    </div>
-                    <StatusBadge status={productionStatus?.status} />
-                  </div>
-
-                  <label className="settings-field">
-                    <span>Replace production token</span>
-                    <input
-                      type="password"
-                      name="productionToken"
-                      value={formData.productionToken}
-                      onChange={handleChange}
-                      placeholder={settings?.tokens?.production?.configured ? "Enter a new token" : "Paste production token"}
-                      autoComplete="new-password"
-                    />
-                  </label>
-
-                  {settings?.tokens?.production?.configured && (
-                    <label className="settings-clear-check">
-                      <input
-                        type="checkbox"
-                        name="clearProductionToken"
-                        checked={formData.clearProductionToken}
-                        onChange={handleChange}
-                      />
-                      Remove stored production token
-                    </label>
-                  )}
-                </article>
-              </div>
-
-              <div className="settings-form-actions">
-                <button className="settings-primary-action" type="submit" disabled={saving}>
-                  {saving ? <Spinner /> : <FiSave size={16} />}
-                  Save Settings
-                </button>
-                <button
-                  className="settings-secondary-action"
-                  type="button"
-                  onClick={handleCheckLive}
-                  disabled={checking}
-                >
-                  {checking ? <Spinner /> : <FiActivity size={16} />}
-                  Verify {environmentLabel}
-                </button>
-                <Link className="settings-secondary-action" to="/sandbox">
-                  <FiShield size={16} />
-                  Open Sandbox
-                </Link>
-              </div>
-            </form>
-
-            <aside className="settings-side-column">
-              <section className="settings-panel">
-                <div className="settings-panel__top compact">
+              <form className="settings-card" onSubmit={handleSave}>
+                <div className="settings-card__hdr">
                   <div>
-                    <h2>Token Readiness</h2>
+                    <h3>Submission Controls</h3>
+                    <p>These values decide how Add Invoice sends FBR payloads.</p>
+                  </div>
+                  <StatusBadge status={activeStatus?.status} />
+                </div>
+
+                <div className="settings-card__body">
+                  <div className="settings-toggle-row">
+                    <div>
+                      <div className="settings-toggle-row__title">{formData.useMock ? "Mock Mode" : "Live Mode"}</div>
+                      <div className="settings-toggle-row__sub">{formData.useMock ? "FBR is bypassed for generated invoice numbers." : "A valid token is required for submissions."}</div>
+                    </div>
+                    <label className="settings-toggle">
+                      <input type="checkbox" name="useMock" checked={formData.useMock} onChange={handleChange} />
+                      <span className="settings-toggle__slider" />
+                    </label>
+                  </div>
+
+                  {formData.useMock && (
+                    <div className="settings-warning-strip">
+                      <FiAlertTriangle size={15} />
+                      <span>Mock mode is safe for demos and local testing, but live sandbox certification requires this to be off.</span>
+                    </div>
+                  )}
+
+                  <div className="settings-token-grid">
+                    <div className="settings-token-card">
+                      <div className="settings-token-card__hdr">
+                        <span>Sandbox Token</span>
+                        <StatusBadge status={sandboxStatus?.status} />
+                      </div>
+                      <div className="settings-token-current">{settings?.tokens?.sandbox?.configured ? settings.tokens.sandbox.masked : "Not configured"}</div>
+                      <span className="settings-field-label">Replace sandbox token</span>
+                      <div className="settings-token-field">
+                        <input
+                          type={showSandboxToken ? "text" : "password"}
+                          name="sandboxToken"
+                          value={formData.sandboxToken}
+                          onChange={handleChange}
+                          placeholder={settings?.tokens?.sandbox?.configured ? "Enter a new token" : "Paste sandbox token"}
+                          autoComplete="new-password"
+                        />
+                        <button type="button" onClick={() => setShowSandboxToken((v) => !v)} aria-label="Toggle visibility">
+                          {showSandboxToken ? <FiEyeOff size={14} /> : <FiEye size={14} />}
+                        </button>
+                      </div>
+                      {settings?.tokens?.sandbox?.configured && (
+                        <label className="settings-clear-check">
+                          <input type="checkbox" name="clearSandboxToken" checked={formData.clearSandboxToken} onChange={handleChange} />
+                          Remove stored sandbox token
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="settings-token-card">
+                      <div className="settings-token-card__hdr">
+                        <span>Production Token</span>
+                        <StatusBadge status={productionStatus?.status} />
+                      </div>
+                      <div className="settings-token-current">{settings?.tokens?.production?.configured ? settings.tokens.production.masked : "Not configured"}</div>
+                      <span className="settings-field-label">Replace production token</span>
+                      <div className="settings-token-field">
+                        <input
+                          type={showProductionToken ? "text" : "password"}
+                          name="productionToken"
+                          value={formData.productionToken}
+                          onChange={handleChange}
+                          placeholder={settings?.tokens?.production?.configured ? "Enter a new token" : "Paste production token"}
+                          autoComplete="new-password"
+                        />
+                        <button type="button" onClick={() => setShowProductionToken((v) => !v)} aria-label="Toggle visibility">
+                          {showProductionToken ? <FiEyeOff size={14} /> : <FiEye size={14} />}
+                        </button>
+                      </div>
+                      {settings?.tokens?.production?.configured && (
+                        <label className="settings-clear-check">
+                          <input type="checkbox" name="clearProductionToken" checked={formData.clearProductionToken} onChange={handleChange} />
+                          Remove stored production token
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="settings-form-actions">
+                    <button className="settings-btn-primary" type="submit" disabled={saving}>
+                      {saving ? <Spinner /> : <FiSave size={14} />}
+                      Save Settings
+                    </button>
+                    <button className="settings-btn-outline" type="button" onClick={handleCheckLive} disabled={checking}>
+                      {checking ? <Spinner /> : <FiActivity size={14} />}
+                      Verify {environmentLabel}
+                    </button>
+                    <Link className="settings-btn-outline" to="/sandbox">
+                      <FiShield size={14} />
+                      Open Sandbox
+                    </Link>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <aside className="settings-aside">
+              <article className="settings-card compact">
+                <div className="settings-card__hdr">
+                  <div>
+                    <h3>Token Readiness</h3>
                     <p>Status returned by the token endpoints.</p>
                   </div>
                 </div>
+                <div className="settings-card__body">
+                  <TokenStatusRow title="Active Token" status={activeStatus} />
+                  <TokenStatusRow title="Sandbox" status={sandboxStatus} />
+                  <TokenStatusRow title="Production" status={productionStatus} />
+                </div>
+              </article>
 
-                <TokenStatusRow title="Active Token" status={activeStatus} />
-                <TokenStatusRow title="Sandbox" status={sandboxStatus} />
-                <TokenStatusRow title="Production" status={productionStatus} />
-              </section>
-
-              <section className="settings-panel">
-                <div className="settings-panel__top compact">
+              <article className="settings-card compact">
+                <div className="settings-card__hdr">
                   <div>
-                    <h2>Network</h2>
+                    <h3>Network</h3>
                     <p>Outbound address for FBR and PRAL whitelisting.</p>
                   </div>
                 </div>
-
-                <div className="settings-ip-card">
-                  <code>{outboundIp?.publicIp || "Unavailable"}</code>
-                  {outboundIp?.publicIp && (
-                    <button type="button" onClick={copyIp} aria-label="Copy outbound IP">
-                      {copied ? <FiCheckCircle size={16} /> : <FiCopy size={16} />}
-                    </button>
-                  )}
-                </div>
-
-                <div className="settings-detail-list">
-                  <div>
-                    <span>Source</span>
-                    <strong>{outboundIp?.source || "N/A"}</strong>
+                <div className="settings-card__body">
+                  <div className="settings-ip-card">
+                    <code>{outboundIp?.publicIp || "Unavailable"}</code>
+                    {outboundIp?.publicIp && (
+                      <button type="button" onClick={copyIp} aria-label="Copy outbound IP">
+                        {copied ? <FiCheckCircle size={14} /> : <FiCopy size={14} />}
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <span>Local Addresses</span>
-                    <strong>{outboundIp?.localAddresses?.length ? outboundIp.localAddresses.join(", ") : "N/A"}</strong>
+                  <div className="settings-row">
+                    <span className="settings-row__key">Source</span>
+                    <span className="settings-row__val">{outboundIp?.source || "N/A"}</span>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row__key">Local Addresses</span>
+                    <span className="settings-row__val">{outboundIp?.localAddresses?.length ? outboundIp.localAddresses.join(", ") : "N/A"}</span>
                   </div>
                 </div>
-              </section>
+              </article>
 
-              <section className="settings-panel">
-                <div className="settings-panel__top compact">
+              <article className="settings-card compact">
+                <div className="settings-card__hdr">
                   <div>
-                    <h2>Current State</h2>
+                    <h3>Current State</h3>
                     <p>Saved configuration currently used by invoice submission.</p>
                   </div>
                 </div>
-
-                <div className="settings-detail-list">
-                  <div>
-                    <span>Environment</span>
-                    <strong>{savedEnvironmentLabel}</strong>
-                  </div>
-                  <div>
-                    <span>Mode</span>
-                    <strong>{settings?.useMock ? "Mock" : "Live"}</strong>
-                  </div>
-                  <div>
-                    <span>Sandbox token</span>
-                    <strong className={sandboxTokenConfigured ? "success-text" : "danger-text"}>{sandboxTokenConfigured ? "Configured" : "Missing"}</strong>
-                  </div>
-                  <div>
-                    <span>Production token</span>
-                    <strong className={productionTokenConfigured ? "success-text" : "warning-text"}>{productionTokenConfigured ? "Configured" : "Not needed yet"}</strong>
-                  </div>
-                  <div>
-                    <span>Last saved</span>
-                    <strong>{settings?.updatedAt ? formatDateTime(settings.updatedAt) : "N/A"}</strong>
-                  </div>
+                <div className="settings-card__body">
+                  <div className="settings-row"><span className="settings-row__key">Environment</span><span className="settings-row__val">{savedEnvironmentLabel}</span></div>
+                  <div className="settings-row"><span className="settings-row__key">Mode</span><span className="settings-row__val">{settings?.useMock ? "Mock" : "Live"}</span></div>
+                  <div className="settings-row"><span className="settings-row__key">Sandbox token</span><span className={`settings-row__val ${sandboxTokenConfigured ? "tone-success" : "tone-danger"}`}>{sandboxTokenConfigured ? "Configured" : "Missing"}</span></div>
+                  <div className="settings-row"><span className="settings-row__key">Production token</span><span className={`settings-row__val ${productionTokenConfigured ? "tone-success" : "tone-warning"}`}>{productionTokenConfigured ? "Configured" : "Not needed yet"}</span></div>
+                  <div className="settings-row"><span className="settings-row__key">Last saved</span><span className="settings-row__val">{settings?.updatedAt ? formatDateTime(settings.updatedAt) : "N/A"}</span></div>
                 </div>
-              </section>
+              </article>
             </aside>
           </section>
         </>

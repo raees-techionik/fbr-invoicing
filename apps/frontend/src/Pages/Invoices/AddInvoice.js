@@ -17,6 +17,7 @@ import { generateInvoicePdfFromForm } from "../../utils/generateInvoicePdf";
 import techionikLogo from "../../Images/TechionikIcon.png";
 import { IoMdArrowRoundForward } from "react-icons/io";
 import { MdCancel } from "react-icons/md";
+import "./AddInvoice.css";
 
 const fallbackDocumentTypeOptions = [
   { value: "Sale Invoice", label: "Sale Invoice (Taxable)" },

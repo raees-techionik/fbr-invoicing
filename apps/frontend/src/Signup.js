@@ -26,6 +26,17 @@ const Signup = () => {
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
+  const passwordStrength = (() => {
+    const value = form.password;
+    let score = 0;
+    if (value.length >= 8) score += 1;
+    if (/[A-Z]/.test(value)) score += 1;
+    if (/[0-9]/.test(value)) score += 1;
+    if (/[^A-Za-z0-9]/.test(value)) score += 1;
+    const labels = ["Weak password", "Fair password", "Good password", "Strong password"];
+    return { score, label: labels[Math.max(score - 1, 0)] };
+  })();
+
   const handleSignup = async (e) => {
     e.preventDefault();
 
@@ -134,6 +145,19 @@ const Signup = () => {
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
               </button>
             </div>
+            {form.password && (
+              <div className="signup-strength">
+                <div className="signup-strength__bars">
+                  {[0, 1, 2, 3].map((i) => (
+                    <span
+                      key={i}
+                      className={i < passwordStrength.score ? `is-filled tier-${passwordStrength.score}` : ""}
+                    />
+                  ))}
+                </div>
+                <span className="signup-strength__label">{passwordStrength.label}</span>
+              </div>
+            )}
           </label>
 
           <label className="signup-field" htmlFor="signup-phone">

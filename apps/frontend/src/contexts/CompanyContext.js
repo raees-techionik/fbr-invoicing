@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getCompanies, getCurrentUser, setDefaultCompany } from "../services/companyApi";
-import { getActiveCompanyId, setActiveCompanyId } from "../services/companySession";
+import { getActiveCompanyId, setActiveCompanyId, getToken } from "../services/companySession";
 
 const CompanyContext = createContext(null);
 
@@ -14,11 +14,11 @@ export function CompanyProvider({ children }) {
   const [user, setUser] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [activeCompany, setActiveCompany] = useState(null);
-  const [loading, setLoading] = useState(Boolean(localStorage.getItem("token")));
+  const [loading, setLoading] = useState(Boolean(getToken()));
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
-    if (!localStorage.getItem("token")) {
+    if (!getToken()) {
       setLoading(false);
       return;
     }

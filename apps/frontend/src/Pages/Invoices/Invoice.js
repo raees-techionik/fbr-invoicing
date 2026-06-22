@@ -15,6 +15,7 @@ import {
   FiTrash2,
   FiUpload,
   FiUsers,
+  FiX,
   FiXCircle,
 } from 'react-icons/fi';
 import useBlockBackButton from '../../Components/useBlockBackButton';
@@ -46,7 +47,7 @@ function Invoice() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false);
+  const [showViewPanel, setShowViewPanel] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState(null);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [downloadLoading, setDownloadLoading] = useState(false);
@@ -172,7 +173,7 @@ function Invoice() {
 
   const handleView = async (invoice) => {
     setCurrentInvoice(invoice);
-    setShowViewModal(true);
+    setShowViewPanel(true);
     try {
       setCurrentInvoice(await loadInvoiceDetail(invoice));
     } catch (error) {
@@ -208,15 +209,16 @@ function Invoice() {
   const safeFileName = (name, fallback = 'invoice') =>
     (name || fallback).toString().trim().replace(/[\\/:*?"<>|]/g, '_').slice(0, 120);
 
-  const handleDownload = async () => {
-    if (selectedInvoices.length === 0) {
+  const handleDownload = async (idsOverride) => {
+    const ids = idsOverride || selectedInvoices;
+    if (ids.length === 0) {
       toast.warning('Please select at least one invoice to download');
       return;
     }
 
     setDownloadLoading(true);
     try {
-      const selected = selectedInvoices.map((id) => invoices.find((inv) => inv.id === id)).filter(Boolean);
+      const selected = ids.map((id) => invoices.find((inv) => inv.id === id)).filter(Boolean);
 
       if (selected.length === 1) {
         const inv = await loadInvoiceDetail(selected[0]);
@@ -262,8 +264,9 @@ function Invoice() {
         : normalized === 'DRAFT'
           ? 'neutral'
           : 'warning';
+    const symbol = tone === 'success' ? '✓' : tone === 'danger' ? '✗' : '◎';
 
-    return <span className={`invoice-status-badge ${tone}`}>{normalized.replaceAll('_', ' ')}</span>;
+    return <span className={`invoice-status-badge ${tone}`}>{symbol} {normalized.replaceAll('_', ' ')}</span>;
   };
 
   const Spinner = () => (
@@ -335,19 +338,6 @@ function Invoice() {
             <p>{filteredInvoices.length.toLocaleString()} records found</p>
           </div>
 
-          <div className="invoice-bulk-actions">
-            <button type="button" onClick={handleDownload} disabled={downloadLoading || selectedInvoices.length === 0}>
-              {downloadLoading ? <Spinner /> : <FiDownload />}
-              Download
-            </button>
-            <button type="button" onClick={handleBulkDelete} disabled={selectedInvoices.length === 0}>
-              <FiTrash2 />
-              Delete
-            </button>
-          </div>
-        </div>
-
-        <div className="invoice-toolbar">
           <div className="invoice-status-tabs">
             {statusFilters.map((filter) => (
               <button
@@ -360,7 +350,9 @@ function Invoice() {
               </button>
             ))}
           </div>
+        </div>
 
+        <div className="invoice-toolbar">
           <div className="invoice-filters">
             <div className="invoice-search">
               <FiSearch />
@@ -452,9 +444,14 @@ function Invoice() {
                     <td>{formatAmount(getAmount(invoice))}</td>
                     <td>{statusBadge(getStatus(invoice))}</td>
                     <td>
-                      <button className="invoice-icon-action" type="button" onClick={() => handleView(invoice)} title="View invoice">
-                        <FiEye />
-                      </button>
+                      <div className="invoice-row-actions">
+                        <button className="invoice-icon-action" type="button" onClick={() => handleView(invoice)} title="View invoice">
+                          <FiEye />
+                        </button>
+                        <button className="invoice-icon-action" type="button" onClick={() => handleDownload([invoice.id])} title="Download PDF">
+                          <FiDownload />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -478,33 +475,44 @@ function Invoice() {
         )}
       </section>
 
-      {showViewModal && currentInvoice && (
-        <div className="invoice-modal-backdrop">
-          <div className="invoice-modal invoice-modal--large" role="dialog" aria-modal="true" aria-labelledby="invoice-detail-title">
-            <div className="invoice-modal__header">
+      {/* Slide-in detail panel */}
+      <div className={`invoice-overlay ${showViewPanel ? 'open' : ''}`} onClick={() => setShowViewPanel(false)} />
+      <div className={`invoice-detail-panel ${showViewPanel ? 'open' : ''}`}>
+        {currentInvoice && (
+          <>
+            <div className="invoice-detail-panel__hdr">
               <div>
-                <p>Invoice Details</p>
-                <h2 id="invoice-detail-title">{getInvoiceRef(currentInvoice)}</h2>
+                <div className="invoice-detail-panel__title">{getInvoiceRef(currentInvoice)}</div>
+                <div className="invoice-detail-panel__sub">Invoice details</div>
               </div>
-              <button type="button" onClick={() => setShowViewModal(false)} aria-label="Close details">×</button>
+              <button type="button" onClick={() => setShowViewPanel(false)} aria-label="Close"><FiX size={15} /></button>
             </div>
-
-            <div className="invoice-detail-grid">
-              <div><span>FBR Invoice Number</span><strong>{getFbrNumber(currentInvoice)}</strong></div>
-              <div><span>Invoice Type</span><strong>{currentInvoice.invoice_type || currentInvoice.invoiceType || '-'}</strong></div>
-              <div><span>Invoice Date</span><strong>{formatDate(getInvoiceDate(currentInvoice))}</strong></div>
-              <div><span>Buyer Name</span><strong>{getBuyerName(currentInvoice)}</strong></div>
-              <div><span>Buyer NTN/CNIC</span><strong>{currentInvoice.buyer_ntn_cnic || currentInvoice.buyerNTNCNIC || '-'}</strong></div>
-              <div><span>Amount</span><strong className="invoice-success-text">{formatAmount(getAmount(currentInvoice))}</strong></div>
-              <div><span>Status</span>{statusBadge(getStatus(currentInvoice))}</div>
-              <div><span>Source</span><strong>{currentInvoice.source || '-'}</strong></div>
-              <div><span>Submitted At</span><strong>{currentInvoice.created_at ? new Date(currentInvoice.created_at).toLocaleString() : '-'}</strong></div>
+            <div className="invoice-detail-panel__body">
+              <div className="invoice-detail-badge-wrap">
+                {statusBadge(getStatus(currentInvoice))}
+              </div>
+              <div className="invoice-detail-section">
+                <div className="invoice-detail-section__title">FBR Submission</div>
+                <div className="invoice-detail-row"><span>FBR Invoice Number</span><strong>{getFbrNumber(currentInvoice)}</strong></div>
+                <div className="invoice-detail-row"><span>Invoice Type</span><strong>{currentInvoice.invoice_type || currentInvoice.invoiceType || '-'}</strong></div>
+                <div className="invoice-detail-row"><span>Source</span><strong>{currentInvoice.source || '-'}</strong></div>
+                <div className="invoice-detail-row"><span>Submitted At</span><strong>{currentInvoice.created_at ? new Date(currentInvoice.created_at).toLocaleString() : '-'}</strong></div>
+              </div>
+              <div className="invoice-detail-section">
+                <div className="invoice-detail-section__title">Buyer</div>
+                <div className="invoice-detail-row"><span>Buyer Name</span><strong>{getBuyerName(currentInvoice)}</strong></div>
+                <div className="invoice-detail-row"><span>Buyer NTN/CNIC</span><strong>{currentInvoice.buyer_ntn_cnic || currentInvoice.buyerNTNCNIC || '-'}</strong></div>
+              </div>
+              <div className="invoice-detail-section">
+                <div className="invoice-detail-section__title">Amount</div>
+                <div className="invoice-detail-row"><span>Invoice Date</span><strong>{formatDate(getInvoiceDate(currentInvoice))}</strong></div>
+                <div className="invoice-detail-row"><span>Grand Total</span><strong className="invoice-success-text">{formatAmount(getAmount(currentInvoice))}</strong></div>
+              </div>
             </div>
-
-            <div className="invoice-modal__footer">
+            <div className="invoice-detail-panel__footer">
               <button
                 type="button"
-                className="invoice-secondary-action"
+                className="invoice-primary-action"
                 onClick={async () => {
                   const inv = await loadInvoiceDetail(currentInvoice);
                   const blob = await generateInvoicePdfFromRecord(inv);
@@ -514,11 +522,23 @@ function Invoice() {
               >
                 <FiDownload /> Download PDF
               </button>
-              <button type="button" className="invoice-primary-action" onClick={() => setShowViewModal(false)}>Close</button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
+
+      {/* Floating bulk action bar */}
+      <div className={`invoice-bulk-bar ${selectedInvoices.length ? 'show' : ''}`}>
+        <span>{selectedInvoices.length} selected</span>
+        <div className="invoice-bulk-bar__sep" />
+        <button type="button" onClick={() => handleDownload()} disabled={downloadLoading}>
+          {downloadLoading ? <Spinner /> : <FiDownload size={14} />} Download
+        </button>
+        <button type="button" className="danger" onClick={handleBulkDelete}>
+          <FiTrash2 size={14} /> Delete
+        </button>
+        <button type="button" className="close" onClick={() => setSelectedInvoices([])} aria-label="Clear selection"><FiX size={14} /></button>
+      </div>
 
       {showDeleteModal && (
         <div className="invoice-modal-backdrop">
