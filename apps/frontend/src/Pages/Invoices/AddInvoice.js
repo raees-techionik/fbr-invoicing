@@ -1160,6 +1160,30 @@ const renderFbrFieldError = (field, index) => {
         </section>
       )}
 
+      <div className="add-invoice-steps" aria-label="Invoice progress">
+        <div className={`add-invoice-step ${invoiceData.invoiceType && invoiceData.invoiceDate ? "done" : "active"}`}>
+          <span className="add-invoice-step-circle">1</span>
+          <span>Invoice Info</span>
+        </div>
+        <div className="add-invoice-step-line" />
+        <div className={`add-invoice-step ${invoiceData.buyerNTNCNIC && invoiceData.buyerBusinessName ? "done" : "active"}`}>
+          <span className="add-invoice-step-circle">2</span>
+          <span>Buyer Details</span>
+        </div>
+        <div className="add-invoice-step-line" />
+        <div className={`add-invoice-step ${invoiceData.items.length > 0 ? "done" : ""}`}>
+          <span className="add-invoice-step-circle">3</span>
+          <span>Line Items</span>
+        </div>
+        <div className="add-invoice-step-line" />
+        <div className="add-invoice-step">
+          <span className="add-invoice-step-circle">4</span>
+          <span>Review</span>
+        </div>
+      </div>
+
+      <div className="add-invoice-form-layout">
+        <div className="add-invoice-form-main">
       <div className="container-fluid px-0 mt-3 mt-md-0">
         <div className="row">
           <div className="col-md-6">
@@ -1789,6 +1813,90 @@ const renderFbrFieldError = (field, index) => {
             {isSubmitting ? 'Submitting...' : 'Submit Invoice'}
           </button>
         </div>
+      </div>
+        </div>
+
+        <aside className="add-invoice-side-rail" aria-label="Invoice review summary">
+          <section className="add-invoice-rail-card">
+            <div className="add-invoice-rail-header">
+              <div>
+                <span>Live Summary</span>
+                <h2>Invoice Review</h2>
+              </div>
+              <strong>{isOffline ? "Queue" : "Live"}</strong>
+            </div>
+
+            <div className="add-invoice-check-list">
+              <div className={`add-invoice-check ${invoiceData.invoiceType && invoiceData.invoiceDate ? "ok" : "pending"}`}>
+                Invoice details {invoiceData.invoiceType && invoiceData.invoiceDate ? "filled" : "pending"}
+              </div>
+              <div className={`add-invoice-check ${invoiceData.buyerNTNCNIC && invoiceData.buyerBusinessName ? "ok" : "pending"}`}>
+                Buyer information {invoiceData.buyerNTNCNIC && invoiceData.buyerBusinessName ? "set" : "needed"}
+              </div>
+              <div className={`add-invoice-check ${invoiceData.items.length > 0 ? "ok" : "pending"}`}>
+                {invoiceData.items.length} line item{invoiceData.items.length === 1 ? "" : "s"} added
+              </div>
+              <div className={`add-invoice-check ${headerFbrErrors.length || fbrValidationErrors.length ? "pending" : "ok"}`}>
+                FBR validation {headerFbrErrors.length || fbrValidationErrors.length ? "needs review" : "ready"}
+              </div>
+            </div>
+
+            <div className="add-invoice-rail-divider" />
+
+            <div className="add-invoice-rail-row">
+              <span>Scenario</span>
+              <strong>{invoiceData.scenarioId || "Not selected"}</strong>
+            </div>
+            <div className="add-invoice-rail-row">
+              <span>Reference</span>
+              <strong>{invoiceData.invoiceRefNo || "Draft"}</strong>
+            </div>
+            <div className="add-invoice-rail-row total">
+              <span>Grand Total</span>
+              <strong>PKR {itemsTotalValue.toFixed(2)}</strong>
+            </div>
+
+            <button
+              className="add-invoice-rail-submit"
+              type="button"
+              onClick={handleSubmitInvoice}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Submitting..." : "Submit to FBR"}
+            </button>
+            <button
+              className="add-invoice-rail-save"
+              type="button"
+              onClick={handlePreviewFormattedPayload}
+              disabled={isFormattingInvoice}
+            >
+              {isFormattingInvoice ? "Formatting..." : "Preview FBR Payload"}
+            </button>
+          </section>
+
+          <section className="add-invoice-rail-card add-invoice-fbr-card">
+            <div className="add-invoice-fbr-title">FBR Integration</div>
+            <div className="add-invoice-rail-row">
+              <span>Connection</span>
+              <strong className={isOffline ? "danger" : "success"}>{isOffline ? "Offline" : "Online"}</strong>
+            </div>
+            <div className="add-invoice-rail-row">
+              <span>Payload</span>
+              <strong>{formattedInvoicePreview ? "Prepared" : "Not previewed"}</strong>
+            </div>
+            <div className="add-invoice-rail-row">
+              <span>Items</span>
+              <strong>{invoiceData.items.length}</strong>
+            </div>
+          </section>
+
+          <section className="add-invoice-rail-card add-invoice-quick-links">
+            <div className="add-invoice-fbr-title">Quick Links</div>
+            <Link to="/customers">View All Customers</Link>
+            <Link to="/products">Product Catalog</Link>
+            <Link to="/invoice/upload">Upload CSV Instead</Link>
+          </section>
+        </aside>
       </div>
     </div>
   );

@@ -183,7 +183,6 @@ function MainContent() {
 
 function App() {
   const [language, setLanguage] = useState(localStorage.getItem('preferredLanguage') || 'en');
-  const [loading, setLoading] = useState(true);
 
   const changeLanguage = useCallback((lang) => {
     localStorage.setItem('preferredLanguage', lang);
@@ -193,7 +192,6 @@ function App() {
     if (select) {
       select.value = lang;
       select.dispatchEvent(new Event('change'));
-      setTimeout(() => setLoading(false), 1000);
     } else {
       const frame = document.querySelector('.goog-te-menu-frame');
       if (frame) {
@@ -201,11 +199,9 @@ function App() {
         if (innerSelect) {
           innerSelect.value = lang;
           innerSelect.dispatchEvent(new Event('change'));
-          setTimeout(() => setLoading(false), 1000);
         }
       } else {
         document.cookie = `googtrans=/en/${lang}; path=/`;
-        window.location.reload();
       }
     }
   }, []);
@@ -220,6 +216,8 @@ function App() {
       script.src = 'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
       script.async = true;
       document.body.appendChild(script);
+    } else if (window.google?.translate) {
+      window.googleTranslateElementInit?.();
     }
 
     window.googleTranslateElementInit = () => {
@@ -266,15 +264,7 @@ function App() {
   return (
     <Router>
       <div id="google_translate_element" style={{ display: 'none' }}></div>
-
-      {loading ? (
-        <div className="custom-loader-wrapper">
-          <div className="custom-spinner"></div>
-          <span className="visually-hidden">Loading...</span>
-        </div>
-      ) : (
-        <CompanyProvider><MainContent /></CompanyProvider>
-      )}
+      <CompanyProvider><MainContent /></CompanyProvider>
     </Router>
   );
 }

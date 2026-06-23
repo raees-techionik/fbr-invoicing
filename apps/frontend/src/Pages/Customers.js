@@ -500,8 +500,8 @@ function Customers() {
       </section>
 
       {/* Slide-in detail panel */}
-      <div className={`customers-overlay ${viewCustomer ? 'open' : ''}`} onClick={() => setViewCustomer(null)} />
-      <div className={`customers-detail-panel ${viewCustomer ? 'open' : ''}`}>
+      <div className={`customers-overlay ${viewCustomer ? 'open' : ''}`} onClick={() => setViewCustomer(null)} aria-hidden={!viewCustomer} />
+      <div className={`customers-detail-panel ${viewCustomer ? 'open' : ''}`} aria-hidden={!viewCustomer}>
         {viewCustomer && (
           <>
             <div className="customers-detail-panel__hdr">

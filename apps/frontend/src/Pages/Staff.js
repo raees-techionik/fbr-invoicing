@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FiDownload, FiSearch, FiTrash2 } from 'react-icons/fi';
 import useBlockBackButton from '../Components/useBlockBackButton';
 import { getStaffMembers, getStaffMember, createStaffMember, updateStaffMember, deleteStaffMember } from '../services/staffApi';
 import './Staff.css';
@@ -28,7 +27,7 @@ const memberAddress = (m) => m.address || '';
 const avatarTones = ['av-p', 'av-b', 'av-g', 'av-o', 'av-s'];
 
 function initialsOf(name) {
-  const words = String(name || '').trim().split(/[\s—\-]+/);
+  const words = String(name || '').trim().split(/[\s—-]+/);
   return ((words[0]?.[0] || '') + (words[1]?.[0] || '')).toUpperCase() || 'ST';
 }
 
@@ -280,7 +279,7 @@ function Staff() {
       {/* Page header */}
       <div className="stf-page-hdr">
         <div className="stf-page-hdr__left">
-          <h2>Staff Members</h2>
+          <h1>Staff Members</h1>
           <p>Manage employees who can be assigned to companies and invoicing workflows</p>
         </div>
         <div className="stf-page-hdr__right">
@@ -518,8 +517,8 @@ function Staff() {
       </div>
 
       {/* Slide-in detail panel */}
-      <div className={`stf-overlay${viewingStaff ? ' open' : ''}`} onClick={() => setViewingStaff(null)} />
-      <div className={`stf-panel${viewingStaff ? ' open' : ''}`}>
+      <div className={`stf-overlay${viewingStaff ? ' open' : ''}`} onClick={() => setViewingStaff(null)} aria-hidden={!viewingStaff} />
+      <div className={`stf-panel${viewingStaff ? ' open' : ''}`} aria-hidden={!viewingStaff}>
         <div className="stf-dp-hdr">
           <div>
             <div className="stf-dp-title">Staff Profile</div>

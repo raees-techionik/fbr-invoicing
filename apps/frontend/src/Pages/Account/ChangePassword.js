@@ -45,7 +45,7 @@ function ChangePassword() {
             <h2>Password</h2>
             <p>Use at least 8 characters and avoid reusing old passwords.</p>
           </div>
-          <FiKey size={24} color="#007a3d" aria-hidden="true" />
+          <FiKey size={24} color="#f05c44" aria-hidden="true" />
         </div>
 
         <div className="account-card-body">

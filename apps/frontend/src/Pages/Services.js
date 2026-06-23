@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FiDownload, FiEdit, FiSearch, FiTrash2, FiX } from 'react-icons/fi';
+import { FiDownload, FiEdit, FiSearch, FiTrash2 } from 'react-icons/fi';
 import { LuEye } from 'react-icons/lu';
 import useBlockBackButton from '../Components/useBlockBackButton';
 import { getServices, getService, createService, updateService, deleteService } from '../services/servicesApi';
@@ -292,7 +292,7 @@ function Services() {
       {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className="svc-page-hdr">
         <div className="svc-page-hdr__left">
-          <h2>Services</h2>
+          <h1>Services</h1>
           <p>Service items used as billable line items on invoices</p>
         </div>
         <div className="svc-page-hdr__right">
@@ -541,8 +541,9 @@ function Services() {
       <div
         className={`svc-overlay${viewingService ? ' open' : ''}`}
         onClick={() => setViewingService(null)}
+        aria-hidden={!viewingService}
       />
-      <div className={`svc-panel${viewingService ? ' open' : ''}`}>
+      <div className={`svc-panel${viewingService ? ' open' : ''}`} aria-hidden={!viewingService}>
         {viewingService && (
           <>
             <div className="svc-dp-hdr">

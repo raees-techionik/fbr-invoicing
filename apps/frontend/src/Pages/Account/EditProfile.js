@@ -1,27 +1,63 @@
-import React, { useState } from 'react';
-import { FiMail, FiPlus, FiSave, FiUser, FiEye, FiEyeOff } from 'react-icons/fi';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FiMail, FiPlus, FiSave, FiUser } from 'react-icons/fi';
 import AccountPageShell from './AccountPageShell';
 import useBlockBackButton from '../../Components/useBlockBackButton';
+import { useCompany } from '../../contexts/CompanyContext';
 
-const initialProfile = {
-  firstName: 'Hamza',
-  lastName: 'Razaq',
+const emptyProfile = {
+  firstName: '',
+  lastName: '',
   gender: '',
   dateOfBirth: '',
   address: '',
   phone: '',
-  username: '@hamzarrazaq-01',
-  password: 'password123',
+  username: '',
 };
+
+function splitName(fullName = '') {
+  const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: '', lastName: '' };
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+}
+
+function usernameFromEmail(email = '') {
+  const local = String(email).split('@')[0] || 'user';
+  return `@${local.replace(/[^a-z0-9._-]/gi, '').toLowerCase()}`;
+}
+
+function initialsFor(firstName, lastName, email) {
+  const initials = `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
+  return initials || String(email || 'U').slice(0, 2).toUpperCase();
+}
 
 function EditProfile() {
   useBlockBackButton();
+  const { user } = useCompany();
   const [isEditable, setIsEditable] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [profile, setProfile] = useState(initialProfile);
-  const [emailList] = useState([
-    { email: 'hamzarrazaq@gmail.com', addedAgo: '1 month ago' },
-  ]);
+  const [profile, setProfile] = useState(emptyProfile);
+
+  const userProfile = useMemo(() => {
+    const { firstName, lastName } = splitName(user?.fullName);
+    return {
+      firstName,
+      lastName,
+      gender: '',
+      dateOfBirth: '',
+      address: '',
+      phone: user?.phone || '',
+      username: usernameFromEmail(user?.email),
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!isEditable) setProfile(userProfile);
+  }, [isEditable, userProfile]);
+
+  const displayName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || user?.fullName || 'Current user';
+  const primaryEmail = user?.email || localStorage.getItem('email') || 'No email available';
+  const avatarInitials = initialsFor(profile.firstName, profile.lastName, primaryEmail);
+  const emailList = [{ email: primaryEmail, addedAgo: 'current account' }];
 
   const updateProfile = (field, value) => {
     setProfile((current) => ({ ...current, [field]: value }));
@@ -45,10 +81,10 @@ function EditProfile() {
       <form className="account-card" onSubmit={handleSubmit}>
         <div className="account-card-header">
           <div className="account-profile-summary">
-            <div className="account-avatar" aria-hidden="true">HR</div>
+            <div className="account-avatar" aria-hidden="true">{avatarInitials}</div>
             <div>
-              <strong>Hamza Razaq</strong>
-              <span>hamzarrazaq@gmail.com</span>
+              <strong>{displayName}</strong>
+              <span>{primaryEmail}</span>
             </div>
           </div>
           <button className="account-button-primary" type="submit" disabled={!isEditable}>
@@ -135,29 +171,6 @@ function EditProfile() {
               <label htmlFor="profile-username">Username</label>
               <input id="profile-username" type="text" value={profile.username} disabled readOnly />
             </div>
-
-            <div className="account-field">
-              <label htmlFor="profile-password">Password</label>
-              <div className="account-input-action">
-                <input
-                  id="profile-password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={profile.password}
-                  disabled={!isEditable}
-                  readOnly
-                />
-                {isEditable && (
-                  <button
-                    className="account-icon-button"
-                    type="button"
-                    onClick={() => setShowPassword((value) => !value)}
-                    aria-label={showPassword ? 'Hide profile password' : 'Show profile password'}
-                  >
-                    {showPassword ? <FiEyeOff size={17} /> : <FiEye size={17} />}
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </form>
@@ -180,7 +193,7 @@ function EditProfile() {
                 <FiMail size={18} aria-hidden="true" />
                 <div>
                   <strong>{item.email}</strong>
-                  <span>Added {item.addedAgo}</span>
+                  <span>{item.addedAgo}</span>
                 </div>
               </li>
             ))}

@@ -476,8 +476,8 @@ function Invoice() {
       </section>
 
       {/* Slide-in detail panel */}
-      <div className={`invoice-overlay ${showViewPanel ? 'open' : ''}`} onClick={() => setShowViewPanel(false)} />
-      <div className={`invoice-detail-panel ${showViewPanel ? 'open' : ''}`}>
+      <div className={`invoice-overlay ${showViewPanel ? 'open' : ''}`} onClick={() => setShowViewPanel(false)} aria-hidden={!showViewPanel} />
+      <div className={`invoice-detail-panel ${showViewPanel ? 'open' : ''}`} aria-hidden={!showViewPanel}>
         {currentInvoice && (
           <>
             <div className="invoice-detail-panel__hdr">

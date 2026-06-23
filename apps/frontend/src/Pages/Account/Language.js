@@ -87,7 +87,7 @@ function Language() {
             <h2>Language Preference</h2>
             <p>You can change this anytime. Translation support depends on Google Translate availability.</p>
           </div>
-          <FiGlobe size={24} color="#007a3d" aria-hidden="true" />
+          <FiGlobe size={24} color="#f05c44" aria-hidden="true" />
         </div>
 
         <div className="account-card-body">

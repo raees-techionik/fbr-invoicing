@@ -7,9 +7,12 @@
   flex-direction: column;
   padding: 18px 14px;
   overflow-y: auto;
-  background: linear-gradient(180deg, #082f29 0%, #06121d 100%);
+  background:
+    radial-gradient(circle at 16% 8%, rgba(240, 92, 68, 0.24), transparent 34%),
+    linear-gradient(180deg, #555963 0%, #3d424b 52%, #2e323a 100%);
   color: #ffffff;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 18px 0 46px rgba(45, 48, 55, 0.2);
 }
 
 .account-sidebar-header {
@@ -21,18 +24,19 @@
 }
 
 .account-brand-lockup {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 0;
 }
 
 .account-brand-lockup img {
   width: 44px;
   height: 44px;
   object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   padding: 6px;
 }
 
@@ -49,7 +53,7 @@
 .account-sidebar-footer span {
   display: block;
   margin-top: 3px;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.66);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
@@ -61,7 +65,7 @@
   height: 34px;
   align-items: center;
   justify-content: center;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
@@ -91,9 +95,11 @@
   font-size: 14px;
   font-weight: 800;
   line-height: 1.3;
+  letter-spacing: 0;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .account-nav-item {
@@ -112,14 +118,18 @@
 .account-nav-item:focus-visible,
 .account-subnav-item:hover,
 .account-subnav-item:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
 }
 
 .account-nav-item.active {
-  background: #0b8f4d;
+  background: linear-gradient(135deg, #f05c44, #d9462f);
   color: #ffffff;
-  box-shadow: 0 14px 28px rgba(0, 122, 61, 0.22);
+  box-shadow: 0 14px 28px rgba(240, 92, 68, 0.32);
+}
+
+.account-nav-item.active svg {
+  color: #ffffff;
 }
 
 .account-subnav {
@@ -137,7 +147,7 @@
 
 .account-subnav-item.active {
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(240, 92, 68, 0.28);
 }
 
 .account-sidebar-footer {
@@ -146,9 +156,9 @@
   gap: 10px;
   margin-top: auto;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .account-sidebar-footer img {

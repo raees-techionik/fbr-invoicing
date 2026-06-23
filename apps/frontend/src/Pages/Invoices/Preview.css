@@ -24,7 +24,7 @@
   letter-spacing: 0.06em;
 }
 
-.upload-preview-header h1 { margin: 0; color: #1a1d23; font-size: 20px; font-weight: 800; letter-spacing: -0.4px; }
+.upload-preview-header h1 { margin: 0; color: #1a1d23; font-size: 20px; font-weight: 800; letter-spacing: 0; }
 .upload-preview-header p { margin: 4px 0 0; color: #9ca3af; font-size: 12.5px; max-width: 460px; }
 .upload-preview-header__actions { display: flex; gap: 8px; flex-shrink: 0; }
 

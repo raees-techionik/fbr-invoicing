@@ -13,12 +13,12 @@
   flex-wrap: wrap;
 }
 
-.settings-page-hdr__text h2 {
+.settings-page-hdr__text h1 {
   margin: 0;
   color: #1a1d23;
   font-size: 19px;
   font-weight: 800;
-  letter-spacing: -0.4px;
+  letter-spacing: 0;
 }
 
 .settings-page-hdr__text p {

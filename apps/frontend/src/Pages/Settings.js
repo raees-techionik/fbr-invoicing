@@ -287,7 +287,7 @@ function Settings() {
     <div className="settings-page">
       <div className="settings-page-hdr">
         <div className="settings-page-hdr__text">
-          <h2>FBR Settings</h2>
+          <h1>FBR Settings</h1>
           <p>Manage token storage, submission mode, and readiness signals used by invoice submission.</p>
         </div>
         <div className="settings-page-hdr__actions">

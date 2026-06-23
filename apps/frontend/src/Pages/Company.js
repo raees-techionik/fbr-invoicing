@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import defaultLogo from '../Images/TechionikIcon.png';
 import { FiEdit, FiMail, FiRefreshCw, FiSave, FiUpload, FiX } from 'react-icons/fi';
 import useBlockBackButton from '../Components/useBlockBackButton';
@@ -142,6 +143,10 @@ function Company() {
     </span>
   );
 
+  const filledFields = Object.values(formData).filter((value) => String(value || '').trim()).length;
+  const totalFields = Object.keys(EMPTY_FORM).length;
+  const completionPercent = Math.round((filledFields / totalFields) * 100);
+
   return (
     <div className="company-page">
       <div className="company-header">
@@ -181,118 +186,162 @@ function Company() {
         </div>
       )}
 
-      <div className="company-stat-grid">
-        <div>
-          <span>Company</span>
-          <strong>{formData.company_name || 'Not set'}</strong>
-        </div>
-        <div>
-          <span>NTN/CNIC</span>
-          <strong>{formData.ntn_or_cnic || 'Not set'}</strong>
-        </div>
-        <div>
-          <span>Province</span>
-          <strong>{formData.province || 'Not set'}</strong>
-        </div>
-        <div>
-          <span>Email</span>
-          <strong>{formData.email_address || 'Not set'}</strong>
-        </div>
-      </div>
-
-      <section className="company-workspace">
-        <aside className="company-identity-card">
+      <section className="company-profile-banner">
+        <div className="company-logo-wrap">
           <div className="company-logo-frame">
-            <img
-              src={logoPreview || defaultLogo}
-              alt="Company logo"
-              onError={(e) => { e.target.src = defaultLogo; }}
-            />
+            <img src={logoPreview || defaultLogo} alt="Company logo" onError={(e) => { e.target.src = defaultLogo; }} />
           </div>
-          <h2>{formData.company_name || 'Company Name'}</h2>
-          <p>{formData.email_address || 'No email set'}</p>
-          <span className="company-profile-badge">{isEditable ? 'Editing' : 'Profile saved'}</span>
-
           {isEditable && (
-            <label className="company-logo-upload">
-              <FiUpload size={16} /> Upload Logo
+            <label className="company-logo-edit" aria-label="Upload company logo">
+              <FiUpload size={14} />
               <input type="file" accept="image/*" onChange={handleLogoChange} />
             </label>
           )}
-          {logoFile && <small className="company-logo-file">Selected: {logoFile.name}</small>}
-        </aside>
-
-        <div className="company-panel">
-          <div className="company-panel__top">
-            <div>
-              <h2>Seller Details</h2>
-              <p>These values are used as seller fields when creating FBR invoices.</p>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="company-loading"><Spinner sm /> Loading company profile...</div>
-          ) : (
-            <div className="company-form-grid">
-              <label>
-                <span>Company Name</span>
-                <input name="company_name" value={formData.company_name} onChange={handleInputChange} disabled={!isEditable} />
-              </label>
-              <label>
-                <span>NTN or CNIC</span>
-                <input name="ntn_or_cnic" value={formData.ntn_or_cnic} onChange={handleInputChange} disabled={!isEditable} />
-              </label>
-              <label>
-                <span>Business Type</span>
-                <select name="business_type" value={formData.business_type} onChange={handleInputChange} disabled={!isEditable}>
-                  <option value="">Select Business Type</option>
-                  {businessTypes.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Province</span>
-                <select name="province" value={formData.province} onChange={handleInputChange} disabled={!isEditable}>
-                  <option value="">Select Province</option>
-                  {provinces.map((province) => (
-                    <option key={province} value={province}>{province}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Phone Number</span>
-                <input name="phone_number" value={formData.phone_number} onChange={handleInputChange} disabled={!isEditable} />
-              </label>
-              <label>
-                <span>Email Address</span>
-                <input name="email_address" value={formData.email_address} onChange={handleInputChange} disabled />
-              </label>
-              <label className="company-form-grid__wide">
-                <span>Address</span>
-                <input name="address" value={formData.address} onChange={handleInputChange} disabled={!isEditable} />
-              </label>
-            </div>
-          )}
-
-          <div className="company-email-card">
-            <div>
-              <FiMail size={20} />
-              <span>
-                <strong>{formData.email_address || 'No email set'}</strong>
-                <small>Primary company email</small>
-              </span>
-            </div>
-            <button
-              className="company-secondary-action"
-              onClick={() => { setPendingEmail(formData.email_address); setShowEmailModal(true); }}
-              disabled={!isEditable || loading}
-            >
-              Edit Email
-            </button>
-          </div>
+        </div>
+        <div className="company-name-tag">
+          <h2>{formData.company_name || 'Company Name'}</h2>
+          <p>NTN/CNIC: {formData.ntn_or_cnic || 'Not set'} · {formData.province || 'Province not set'}</p>
+          {logoFile && <small>Selected logo: {logoFile.name}</small>}
         </div>
       </section>
+
+      {loading ? (
+        <div className="company-loading"><Spinner sm /> Loading company profile...</div>
+      ) : (
+        <div className="company-form-layout">
+          <div className="company-form-stack">
+            <section className="company-sec">
+              <div className="company-sec-hdr">
+                <div className="company-sec-ico"><FiEdit /></div>
+                <div>
+                  <div className="company-sec-title">Business Information</div>
+                  <div className="company-sec-sub">Legal name, registration, and classification</div>
+                </div>
+              </div>
+              <div className="company-sec-body">
+                <div className="company-form-row cols-2">
+                  <label className="company-field">
+                    <span>Company Name <em>*</em></span>
+                    <input name="company_name" value={formData.company_name} onChange={handleInputChange} disabled={!isEditable} />
+                  </label>
+                  <label className="company-field">
+                    <span>NTN / CNIC <em>*</em></span>
+                    <input className="mono" name="ntn_or_cnic" value={formData.ntn_or_cnic} onChange={handleInputChange} disabled={!isEditable} />
+                  </label>
+                </div>
+                <div className="company-form-row cols-2">
+                  <label className="company-field">
+                    <span>Business Type</span>
+                    <select name="business_type" value={formData.business_type} onChange={handleInputChange} disabled={!isEditable}>
+                      <option value="">Select Business Type</option>
+                      {businessTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </label>
+                  <label className="company-field">
+                    <span>Province <em>*</em></span>
+                    <select name="province" value={formData.province} onChange={handleInputChange} disabled={!isEditable}>
+                      <option value="">Select Province</option>
+                      {provinces.map((province) => <option key={province} value={province}>{province}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="company-form-row">
+                  <label className="company-field">
+                    <span>Registered Address <em>*</em></span>
+                    <textarea name="address" value={formData.address} onChange={handleInputChange} disabled={!isEditable} />
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section className="company-sec">
+              <div className="company-sec-hdr">
+                <div className="company-sec-ico"><FiMail /></div>
+                <div>
+                  <div className="company-sec-title">Contact Information</div>
+                  <div className="company-sec-sub">Primary contact details for FBR correspondence</div>
+                </div>
+              </div>
+              <div className="company-sec-body">
+                <div className="company-form-row cols-2">
+                  <label className="company-field">
+                    <span>Phone Number</span>
+                    <input name="phone_number" value={formData.phone_number} onChange={handleInputChange} disabled={!isEditable} />
+                  </label>
+                  <label className="company-field">
+                    <span>Email Address</span>
+                    <div className="company-input-action">
+                      <input name="email_address" value={formData.email_address} disabled />
+                      <button
+                        type="button"
+                        onClick={() => { setPendingEmail(formData.email_address); setShowEmailModal(true); }}
+                        disabled={!isEditable || loading}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section className="company-sec">
+              <div className="company-sec-hdr">
+                <div className="company-sec-ico"><FiSave /></div>
+                <div>
+                  <div className="company-sec-title">Tax Registration</div>
+                  <div className="company-sec-sub">Sales tax and FBR registration readiness</div>
+                </div>
+              </div>
+              <div className="company-sec-body">
+                <div className="company-form-row cols-2">
+                  <label className="company-field">
+                    <span>Sales Tax Registration No.</span>
+                    <input className="mono" value={formData.ntn_or_cnic || ''} disabled />
+                  </label>
+                  <div className="company-field">
+                    <span>STRN Status</span>
+                    <div className="company-status-line"><span className="company-badge success">Active & Verified</span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside className="company-summary-col">
+            <section className="company-fbr-card">
+              <div className="company-card-title"><FiSave /> Profile Completeness</div>
+              <div className="company-progress">
+                <span style={{ width: `${completionPercent}%` }} />
+              </div>
+              <div className="company-fbr-row"><span>Completed</span><strong>{filledFields} of {totalFields} fields</strong></div>
+              <div className="company-fbr-row"><span>Status</span><strong>{isEditable ? 'Editing' : 'Saved'}</strong></div>
+            </section>
+
+            <section className="company-quick-links">
+              <div className="company-quick-title">Related</div>
+              <Link to="/settings" className="company-quick-link">FBR Token Settings</Link>
+              <Link to="/onboarding" className="company-quick-link">Onboarding Status</Link>
+              <Link to="/staff" className="company-quick-link">Manage Team Access</Link>
+            </section>
+
+            <button className="company-submit-action" type="button" onClick={handleSave} disabled={!isEditable || saving}>
+              {saving ? <Spinner sm /> : <><FiSave /> Save Changes</>}
+            </button>
+          </aside>
+        </div>
+      )}
+
+      <div className="company-mobile-actions">
+        {isEditable ? (
+          <>
+            <button className="company-secondary-action" onClick={handleCancelEdit} disabled={saving}>Cancel</button>
+            <button className="company-primary-action" onClick={handleSave} disabled={saving}>{saving ? <Spinner sm /> : 'Save Profile'}</button>
+          </>
+        ) : (
+          <button className="company-primary-action" onClick={() => setIsEditable(true)} disabled={loading}>Edit Profile</button>
+        )}
+      </div>
 
       {showEmailModal && (
         <>

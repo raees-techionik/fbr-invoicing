@@ -20,7 +20,6 @@ import {
   FiCheckCircle,
   FiChevronDown,
   FiChevronRight,
-  FiCopy,
   FiDownload,
   FiEye,
   FiFileText,
@@ -30,7 +29,6 @@ import {
   FiSend,
   FiShield,
   FiTrash2,
-  FiTrendingDown,
   FiTrendingUp,
   FiUpload,
   FiXCircle,
@@ -75,8 +73,13 @@ const statusFilters = [
   { key: 'failed', label: 'Failed' },
 ];
 
-// Animates a number from 0 up to `value` whenever `value` changes, mirroring
-// the mock's count-up effect (cubic ease-out over ~1.1s).
+function formatCurrency(value, { decimals = 0 } = {}) {
+  return `PKR ${Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })}`;
+}
+
 function useCountUp(value, duration = 1100) {
   const [display, setDisplay] = useState(0);
   const frameRef = useRef(null);
@@ -101,45 +104,43 @@ function useCountUp(value, duration = 1100) {
   return display;
 }
 
-function StatCard({ item }) {
+function formatKpiValue(value, format) {
+  if (format === 'currency') return formatCurrency(value);
+  if (format === 'percent') return `${value.toLocaleString()}%`;
+  return value.toLocaleString();
+}
+
+function ActionCard({ item }) {
+  return (
+    <article className={`fbr-action-card ${item.tone}`}>
+      <div className="fbr-action-card__top">
+        <span className="fbr-action-card__icon">{item.icon}</span>
+        <strong>{item.value}</strong>
+      </div>
+      <div>
+        <h3>{item.title}</h3>
+        <p>{item.body}</p>
+      </div>
+      <Link to={item.to} className="fbr-action-card__link">
+        {item.cta}
+        <FiChevronRight />
+      </Link>
+    </article>
+  );
+}
+
+function KpiCard({ item }) {
   const displayValue = useCountUp(item.value);
-  const cardRef = useRef(null);
-
-  const handleMouseMove = (event) => {
-    const card = cardRef.current;
-    if (!card) return;
-    const rect = card.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width - 0.5;
-    const y = (event.clientY - rect.top) / rect.height - 0.5;
-    card.style.transform = `translateY(-4px) scale(1.015) perspective(600px) rotateY(${x * 7}deg) rotateX(${-y * 7}deg)`;
-    card.style.transition = 'none';
-  };
-
-  const handleMouseLeave = () => {
-    const card = cardRef.current;
-    if (!card) return;
-    card.style.transform = '';
-    card.style.transition = 'transform .4s cubic-bezier(.34,1.56,.64,1), box-shadow .3s ease';
-  };
 
   return (
-    <article
-      className="fbr-stat-card"
-      ref={cardRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      <div className={`fbr-stat-icon ${item.tone}`}>{item.icon}</div>
-      <div className="fbr-stat-card__content">
+    <article className="fbr-kpi-card">
+      <div className={`fbr-kpi-card__icon ${item.tone}`}>{item.icon}</div>
+      <div className="fbr-kpi-card__body">
         <span>{item.title}</span>
-        <strong>{displayValue.toLocaleString()}</strong>
-        <p className={item.trendDirection}>
-          {item.trendDirection === 'up' ? <FiTrendingUp /> : <FiTrendingDown />}
-          {item.trend}
-          <em>vs last period</em>
-        </p>
-        <div className="fbr-stat-progress">
-          <div className={`fbr-stat-progress__fill ${item.tone}`} style={{ width: `${item.percent}%` }} />
+        <strong>{formatKpiValue(displayValue, item.format)}</strong>
+        <p>{item.detail}</p>
+        <div className="fbr-kpi-card__bar" aria-hidden="true">
+          <div className={`fbr-kpi-card__fill ${item.tone}`} style={{ width: `${item.percent}%` }} />
         </div>
       </div>
     </article>
@@ -270,8 +271,22 @@ function Dashboard() {
   }, [filteredInvoices, statusFilter]);
 
   const sortedInvoices = useMemo(
-    () => [...filteredByStatus].sort((a, b) => new Date(b.invoiceDate || 0) - new Date(a.invoiceDate || 0)),
-    [filteredByStatus]
+    () => [...filteredByStatus].sort((a, b) => {
+      const priority = (invoice) => {
+        const status = invoice.status || 'DRAFT';
+        if (['UPLOAD_FAILED', 'FAILED', 'REJECTED'].includes(status)) return 0;
+        if (status === 'DRAFT') return 1;
+        return 2;
+      };
+
+      if (statusFilter === 'all') {
+        const priorityDiff = priority(a) - priority(b);
+        if (priorityDiff !== 0) return priorityDiff;
+      }
+
+      return new Date(b.invoiceDate || 0) - new Date(a.invoiceDate || 0);
+    }),
+    [filteredByStatus, statusFilter]
   );
 
   const totalPages = Math.max(1, Math.ceil(sortedInvoices.length / PAGE_SIZE));
@@ -328,7 +343,7 @@ function Dashboard() {
       return { label: `P${index + 1}`, submitted, draft: Math.max(point - submitted, 0) };
     }
 
-    const label = point?.label || point?.period || point?.month || point?.date || `P${index + 1}`;
+    const label = point?.bucket || point?.label || point?.period || point?.month || point?.date || `P${index + 1}`;
     const invoicesValue = Number(
       point?.invoices ??
       point?.invoiceCount ??
@@ -389,47 +404,91 @@ function Dashboard() {
   };
 
   const pct = (value) => (invoices.length ? Math.round((value / invoices.length) * 100) : 0);
+  const successRate = pct(submittedCount);
+  const attentionCount = failedCount + offlineQueueCount + draftCount;
+  const readinessTone = failedCount > 0 ? 'danger' : offlineQueueCount > 0 || draftCount > 0 ? 'warning' : 'success';
+  const readinessLabel = failedCount > 0 ? 'Review needed' : offlineQueueCount > 0 ? 'Queue active' : draftCount > 0 ? 'Drafts pending' : 'Ready';
+  const readinessBody = failedCount > 0
+    ? 'Fix validation errors before the next FBR submission.'
+    : offlineQueueCount > 0
+      ? 'Queued invoices will submit when connectivity returns.'
+      : draftCount > 0
+        ? 'Draft invoices are waiting to be sent to FBR.'
+        : 'No urgent FBR workflow items right now.';
 
-  const statCards = [
+  const actionCards = [
+    {
+      title: 'Failed / Rejected',
+      value: failedCount,
+      body: failedCount > 0 ? 'Invoices need validation review before resubmission.' : 'No failed FBR submissions.',
+      icon: <FiXCircle />,
+      tone: failedCount > 0 ? 'danger' : 'success',
+      to: '/invoice',
+      cta: failedCount > 0 ? 'Review failed' : 'View invoices',
+    },
+    {
+      title: 'Offline Queue',
+      value: offlineQueueCount,
+      body: offlineQueueCount > 0 ? 'Queued invoices are waiting for automatic upload.' : 'No invoices waiting offline.',
+      icon: <FiUpload />,
+      tone: offlineQueueCount > 0 ? 'warning' : 'neutral',
+      to: '/invoice/offline-queue',
+      cta: 'Open queue',
+    },
+    {
+      title: 'Drafts Pending',
+      value: draftCount,
+      body: draftCount > 0 ? 'Draft invoices are ready for final review and submission.' : 'No draft invoices pending.',
+      icon: <FiFileText />,
+      tone: draftCount > 0 ? 'warning' : 'neutral',
+      to: '/invoice',
+      cta: 'Review drafts',
+    },
+    {
+      title: 'FBR Readiness',
+      value: readinessLabel,
+      body: readinessBody,
+      icon: <FiShield />,
+      tone: readinessTone,
+      to: failedCount > 0 ? '/invoice' : '/sandbox',
+      cta: failedCount > 0 ? 'Fix issues' : 'Check sandbox',
+    },
+  ];
+
+  const kpiCards = [
     {
       title: 'Total Invoices',
       value: invoices.length,
-      detail: totalInvoiceAmount > 0 ? `PKR ${totalInvoiceAmount.toLocaleString()} total` : 'No invoice value yet',
+      detail: totalInvoiceAmount > 0 ? `${formatCurrency(totalInvoiceAmount)} total` : 'No invoice value yet',
       icon: <FiFileText />,
-      tone: 'green',
-      trend: '18.6%',
-      trendDirection: 'up',
+      tone: 'orange',
       percent: invoices.length ? 100 : 0,
     },
     {
-      title: 'Submitted',
+      title: 'Submitted to FBR',
       value: submittedCount,
       detail: invoices.length ? `${pct(submittedCount)}% of total invoices` : 'Awaiting submissions',
       icon: <FiSend />,
-      tone: 'green',
-      trend: '16.2%',
-      trendDirection: 'up',
+      tone: 'success',
       percent: pct(submittedCount),
     },
     {
-      title: 'Failed',
-      value: failedCount,
-      detail: failedCount > 0 ? 'Needs validation review' : 'No failed invoices',
-      icon: <FiXCircle />,
-      tone: 'red',
-      trend: '22.9%',
-      trendDirection: 'down',
-      percent: pct(failedCount),
+      title: 'Total Amount',
+      value: totalInvoiceAmount,
+      detail: invoices.length ? 'Invoice value across current data' : 'No amount recorded',
+      icon: <FiFileText />,
+      tone: 'slate',
+      format: 'currency',
+      percent: invoices.length ? Math.min(100, Math.max(12, pct(submittedCount) || 12)) : 0,
     },
     {
-      title: 'Drafts',
-      value: draftCount,
-      detail: 'Awaiting submission',
-      icon: <FiFileText />,
-      tone: 'gray',
-      trend: '5.0%',
-      trendDirection: 'up',
-      percent: pct(draftCount),
+      title: 'Success Rate',
+      value: successRate,
+      detail: failedCount > 0 ? `${failedCount} invoice${failedCount === 1 ? '' : 's'} need attention` : 'No failed submissions',
+      icon: <FiCheckCircle />,
+      tone: failedCount > 0 ? 'warning' : 'success',
+      format: 'percent',
+      percent: successRate,
     },
   ];
 
@@ -585,11 +644,9 @@ function Dashboard() {
 
       <main className="fbr-dashboard__body">
         <section className="fbr-hero">
-          <div className="fbr-hero__blob fbr-hero__blob--1" />
-          <div className="fbr-hero__blob fbr-hero__blob--2" />
-          <div className="fbr-hero__blob fbr-hero__blob--3" />
           <div className="fbr-hero__text">
-            <h2>{greeting}, {displayName} 👋</h2>
+            <span>FBR operations dashboard</span>
+            <h2>{greeting}, {displayName}</h2>
             <p>{heroSubtitle}</p>
           </div>
           <div className="fbr-hero__actions">
@@ -602,6 +659,10 @@ function Dashboard() {
               New Invoice
             </Link>
           </div>
+        </section>
+
+        <section className="fbr-action-grid" aria-label="Needs attention">
+          {actionCards.map((item) => <ActionCard item={item} key={item.title} />)}
         </section>
 
         {offlineQueueCount > 0 ? (
@@ -622,8 +683,8 @@ function Dashboard() {
           </div>
         ) : null}
 
-        <section className="fbr-stat-grid" aria-label="Dashboard metrics">
-          {statCards.map((item) => <StatCard item={item} key={item.title} />)}
+        <section className="fbr-kpi-grid" aria-label="Dashboard metrics">
+          {kpiCards.map((item) => <KpiCard item={item} key={item.title} />)}
         </section>
 
         <section className="fbr-dashboard-grid">
@@ -678,6 +739,114 @@ function Dashboard() {
                 </ResponsiveContainer>
               </div>
             </article>
+
+            <section className="fbr-panel fbr-invoice-panel">
+              <div className="fbr-panel-header">
+                <div className="fbr-panel-title">
+                  <h2>Recent Invoices</h2>
+                  <p>
+                    {attentionCount > 0
+                      ? `${attentionCount} invoice workflow item${attentionCount === 1 ? '' : 's'} need attention.`
+                      : 'No urgent invoice workflow items right now.'}
+                  </p>
+                </div>
+                <div className="fbr-filter-chips">
+                  {statusFilters.map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      className={`fbr-chip ${statusFilter === filter.key ? 'active' : ''}`}
+                      onClick={() => setStatusFilter(filter.key)}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+                <Link to="/invoice" className="fbr-view-all">
+                  View All <FiChevronRight />
+                </Link>
+              </div>
+
+              <div className="fbr-table-wrap">
+                <div className="fbr-table-scroll-hint">Scroll sideways to see all invoice fields</div>
+                <table className="fbr-table">
+                  <thead>
+                    <tr>
+                      <th className="fbr-checkbox-cell">
+                        <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} />
+                      </th>
+                      <th>Invoice #</th>
+                      <th>FBR Ref</th>
+                      <th>Buyer</th>
+                      <th>Date</th>
+                      <th>Amount (PKR)</th>
+                      <th>Status</th>
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading.invoices ? (
+                      <tr><td colSpan="8" className="fbr-empty-cell">Loading invoices...</td></tr>
+                    ) : pageInvoices.length === 0 ? (
+                      <tr><td colSpan="8" className="fbr-empty-cell">No invoices found</td></tr>
+                    ) : (
+                      pageInvoices.map((invoice, index) => (
+                        <tr key={invoice.id || index}>
+                          <td className="fbr-checkbox-cell">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(invoice.id)}
+                              onChange={() => toggleSelectOne(invoice.id)}
+                            />
+                          </td>
+                          <td className="fbr-strong-cell">{invoice.invoiceRefNo || 'N/A'}</td>
+                          <td className="fbr-muted-cell">{invoice.fbrInvoiceNumber || '—'}</td>
+                          <td>{invoice.buyerBusinessName || 'N/A'}</td>
+                          <td>{invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString() : 'N/A'}</td>
+                          <td className="fbr-amount-cell">{(invoice.amountPkr || 0).toLocaleString()}</td>
+                          <td>{statusBadge(invoice.status)}</td>
+                          <td>
+                            <div className="fbr-row-actions">
+                              <button className="fbr-row-action" type="button" aria-label="View invoice" onClick={() => navigate('/invoice')}>
+                                <FiEye />
+                              </button>
+                              <button className="fbr-row-action" type="button" aria-label="Download invoice">
+                                <FiDownload />
+                              </button>
+                              <button className="fbr-row-action danger" type="button" aria-label="Delete invoice">
+                                <FiTrash2 />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {sortedInvoices.length > 0 && (
+                <div className="fbr-pager">
+                  <span className="fbr-pager-info">
+                    Showing {(safePage - 1) * PAGE_SIZE + 1}-{Math.min(safePage * PAGE_SIZE, sortedInvoices.length)} of {sortedInvoices.length} invoices
+                  </span>
+                  <div className="fbr-pager-btns">
+                    <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">‹</button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 5).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={n === safePage ? 'on' : ''}
+                        onClick={() => setPage(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                    <button type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Next page">›</button>
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
 
           <aside className="fbr-readiness-column">
@@ -717,29 +886,29 @@ function Dashboard() {
 
               <section className="fbr-readiness-card">
                 <div className="fbr-readiness-card__header">
-                  <strong>Sandbox Token</strong>
-                  <span className="fbr-pill success">Active</span>
+                  <strong>Readiness State</strong>
+                  <span className={`fbr-pill ${readinessTone}`}>{readinessLabel}</span>
                 </div>
-                <div className="fbr-token">
-                  <code>c3f8...b7e9</code>
-                  <button type="button" aria-label="Copy sandbox token">
-                    <FiCopy />
-                  </button>
+                <div className="fbr-readiness-row">
+                  <span><FiShield /> Submission health</span>
+                  <strong>{failedCount > 0 ? 'Review' : 'Clear'}</strong>
                 </div>
-                <div className="fbr-readiness-meta">
-                  <span>Expires: Jun 12, 2026 11:59 PM</span>
-                  <button type="button">Renew</button>
+                <div className="fbr-readiness-row">
+                  <span><FiFileText /> Pending work</span>
+                  <strong>{attentionCount}</strong>
                 </div>
               </section>
 
               <section className="fbr-readiness-card">
                 <div className="fbr-readiness-card__header">
                   <strong>Queue Status</strong>
-                  <span className="fbr-pill success">Live</span>
+                  <span className={`fbr-pill ${offlineQueueCount > 0 ? 'warning' : 'success'}`}>
+                    {offlineQueueCount > 0 ? 'Queued' : 'Clear'}
+                  </span>
                 </div>
                 <div className="fbr-readiness-row">
-                  <span><FiGlobe /> Production</span>
-                  <strong>Connected</strong>
+                  <span><FiGlobe /> API mode</span>
+                  <strong>Local</strong>
                 </div>
                 <div className="fbr-readiness-row">
                   <span><FiTrendingUp /> Queue Length</span>
@@ -768,106 +937,6 @@ function Dashboard() {
               </Link>
             </article>
           </aside>
-        </section>
-
-        <section className="fbr-panel fbr-invoice-panel">
-          <div className="fbr-panel-header">
-            <h2>Recent Invoices</h2>
-            <div className="fbr-filter-chips">
-              {statusFilters.map((filter) => (
-                <button
-                  key={filter.key}
-                  type="button"
-                  className={`fbr-chip ${statusFilter === filter.key ? 'active' : ''}`}
-                  onClick={() => setStatusFilter(filter.key)}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-            <Link to="/invoice" className="fbr-view-all">
-              View All <FiChevronRight />
-            </Link>
-          </div>
-
-          <div className="fbr-table-wrap">
-            <table className="fbr-table">
-              <thead>
-                <tr>
-                  <th className="fbr-checkbox-cell">
-                    <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} />
-                  </th>
-                  <th>Invoice #</th>
-                  <th>FBR Ref</th>
-                  <th>Buyer</th>
-                  <th>Date</th>
-                  <th>Amount (PKR)</th>
-                  <th>Status</th>
-                  <th aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {loading.invoices ? (
-                  <tr><td colSpan="8" className="fbr-empty-cell">Loading invoices...</td></tr>
-                ) : pageInvoices.length === 0 ? (
-                  <tr><td colSpan="8" className="fbr-empty-cell">No invoices found</td></tr>
-                ) : (
-                  pageInvoices.map((invoice, index) => (
-                    <tr key={invoice.id || index}>
-                      <td className="fbr-checkbox-cell">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(invoice.id)}
-                          onChange={() => toggleSelectOne(invoice.id)}
-                        />
-                      </td>
-                      <td className="fbr-strong-cell">{invoice.invoiceRefNo || 'N/A'}</td>
-                      <td className="fbr-muted-cell">{invoice.fbrInvoiceNumber || '—'}</td>
-                      <td>{invoice.buyerBusinessName || 'N/A'}</td>
-                      <td>{invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString() : 'N/A'}</td>
-                      <td className="fbr-amount-cell">{(invoice.amountPkr || 0).toLocaleString()}</td>
-                      <td>{statusBadge(invoice.status)}</td>
-                      <td>
-                        <div className="fbr-row-actions">
-                          <button className="fbr-row-action" type="button" aria-label="View invoice" onClick={() => navigate('/invoice')}>
-                            <FiEye />
-                          </button>
-                          <button className="fbr-row-action" type="button" aria-label="Download invoice">
-                            <FiDownload />
-                          </button>
-                          <button className="fbr-row-action danger" type="button" aria-label="Delete invoice">
-                            <FiTrash2 />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {sortedInvoices.length > 0 && (
-            <div className="fbr-pager">
-              <span className="fbr-pager-info">
-                Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, sortedInvoices.length)} of {sortedInvoices.length} invoices
-              </span>
-              <div className="fbr-pager-btns">
-                <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">‹</button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 5).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={n === safePage ? 'on' : ''}
-                    onClick={() => setPage(n)}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <button type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Next page">›</button>
-              </div>
-            </div>
-          )}
         </section>
       </main>
       {showLogoutConfirm && (

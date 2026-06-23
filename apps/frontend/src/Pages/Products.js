@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { FiDownload, FiEdit, FiRefreshCw, FiSearch, FiTrash2, FiUpload } from 'react-icons/fi';
-import { LuEye } from 'react-icons/lu';
+import { FiDownload, FiSearch, FiUpload } from 'react-icons/fi';
 import useBlockBackButton from '../Components/useBlockBackButton';
-import { FaPlus } from 'react-icons/fa6';
 import { hsCodes, hsCodeLookup } from '../Components/hsCodes';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getCompanyProfile } from '../services/companyProfileApi';
@@ -24,7 +22,7 @@ import './Products.css';
 const avatarTones = ['av-p', 'av-b', 'av-g', 'av-o', 'av-s'];
 
 function initialsOf(name) {
-  const words = String(name || '').trim().split(/[\s—\-]+/);
+  const words = String(name || '').trim().split(/[\s—-]+/);
   return ((words[0]?.[0] || '') + (words[1]?.[0] || '')).toUpperCase() || 'PR';
 }
 
@@ -689,7 +687,7 @@ function Products() {
       {/* Page header */}
       <div className="prd-page-hdr">
         <div className="prd-page-hdr__left">
-          <h2>Products</h2>
+          <h1>Products</h1>
           <p>Manage product catalog with HS codes and sales tax mapping for FBR invoices</p>
         </div>
         <div className="prd-page-hdr__right">
@@ -1034,8 +1032,8 @@ function Products() {
       </div>
 
       {/* Slide-in detail panel */}
-      <div className={`prd-overlay${viewingProduct ? ' open' : ''}`} onClick={() => setViewingProduct(null)} />
-      <div className={`prd-panel${viewingProduct ? ' open' : ''}`}>
+      <div className={`prd-overlay${viewingProduct ? ' open' : ''}`} onClick={() => setViewingProduct(null)} aria-hidden={!viewingProduct} />
+      <div className={`prd-panel${viewingProduct ? ' open' : ''}`} aria-hidden={!viewingProduct}>
         <div className="prd-dp-hdr">
           <div>
             <div className="prd-dp-title">Product Details</div>

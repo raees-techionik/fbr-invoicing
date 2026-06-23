@@ -114,6 +114,11 @@ const summary = {
   expiredCount: 1,
 };
 
+const queueTitle = (ref) => (_content, element) => (
+  element?.tagName?.toLowerCase() === 'strong' &&
+  element.textContent.includes(ref)
+);
+
 beforeEach(() => {
   jest.clearAllMocks();
   getOfflineQueue.mockResolvedValue(queueItems);
@@ -125,24 +130,24 @@ beforeEach(() => {
 test('renders offline queue warning, expired, failed, and uploaded states', async () => {
   render(<OfflineQueue />);
 
-  expect(await screen.findByText('WARN-1')).toBeInTheDocument();
-  expect(screen.getByText('EXP-1')).toBeInTheDocument();
-  expect(screen.getByText('FAILED-1')).toBeInTheDocument();
+  expect(await screen.findByText(queueTitle('WARN-1'))).toBeInTheDocument();
+  expect(screen.getByText(queueTitle('EXP-1'))).toBeInTheDocument();
+  expect(screen.getByText(queueTitle('FAILED-1'))).toBeInTheDocument();
   expect(screen.getByText('UPLOADED-1')).toBeInTheDocument();
 
-  expect(screen.getByText('20h warning')).toBeInTheDocument();
+  expect(screen.getByText('20h Warnings')).toBeInTheDocument();
   expect(screen.getByText('24h deadline passed')).toBeInTheDocument();
-  expect(screen.getByText('UPLOAD FAILED')).toBeInTheDocument();
-  expect(screen.getByText('SUBMITTED')).toBeInTheDocument();
+  expect(screen.getByText('✗ Upload Failed')).toBeInTheDocument();
+  expect(screen.getByText('✓ Synced')).toBeInTheDocument();
   expect(screen.getByText(/1 offline invoice has passed the 24-hour upload deadline/i)).toBeInTheDocument();
 
-  expect(screen.getAllByRole('button', { name: /retry/i })).toHaveLength(2);
+  expect(screen.getAllByRole('button', { name: /retry now/i })).toHaveLength(2);
 });
 
 test('processes pending offline queue items from the page', async () => {
   render(<OfflineQueue />);
 
-  await screen.findByText('WARN-1');
+  await screen.findByText(queueTitle('WARN-1'));
   const processButton = await screen.findByRole('button', { name: /upload all pending/i });
   expect(processButton).not.toBeDisabled();
 
@@ -160,9 +165,9 @@ test('processes pending offline queue items from the page', async () => {
 test('retries a failed offline queue item from the row action', async () => {
   render(<OfflineQueue />);
 
-  const failedCell = await screen.findByText('FAILED-1');
-  const failedRow = failedCell.closest('tr');
-  const retryButton = within(failedRow).getByRole('button', { name: /retry/i });
+  const failedTitle = await screen.findByText(queueTitle('FAILED-1'));
+  const failedCard = failedTitle.closest('article');
+  const retryButton = within(failedCard).getByRole('button', { name: /retry now/i });
 
   fireEvent.click(retryButton);
 

@@ -8,7 +8,8 @@
   min-height: 100vh;
   max-height: 100vh;
   padding: 0 12px 14px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 40% 8%, rgba(240, 92, 68, 0.24), transparent 26%),
     linear-gradient(180deg, #51555d 0%, #3d4148 55%, #2e3138 100%);
@@ -88,11 +89,12 @@
   color: #ffffff;
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.2px;
+  letter-spacing: 0;
   text-transform: none;
 }
 
 .company-switcher {
+  position: relative;
   display: grid;
   gap: 4px;
   margin: 0 0 8px;
@@ -111,60 +113,90 @@
 }
 
 .company-switcher__control {
-  position: relative;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) 16px;
   align-items: center;
   gap: 7px;
-  min-height: 22px;
-}
-
-.company-switcher__control svg {
-  position: relative;
-  z-index: 1;
-  pointer-events: none;
-}
-
-.company-switcher__control svg:last-child {
-  justify-self: end;
-}
-
-.company-switcher__control select {
-  grid-column: 1 / -1;
-  grid-row: 1;
   width: 100%;
-  min-width: 0;
-  padding: 0 20px 0 25px;
-  overflow: hidden;
+  min-height: 22px;
+  padding: 0;
   color: #ffffff;
   background: transparent;
   border: 0;
   cursor: pointer;
-  outline: 0;
   font: inherit;
+  text-align: left;
+}
+
+.company-switcher__control:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.company-switcher__control svg {
+  pointer-events: none;
+}
+
+.company-switcher__chevron {
+  justify-self: end;
+  transition: transform 160ms ease;
+}
+
+.company-switcher.is-open .company-switcher__chevron {
+  transform: rotate(180deg);
+}
+
+.company-switcher__name {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffffff;
   font-size: 13px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
-  appearance: none;
 }
 
-.company-switcher__control select:focus {
-  border: 0 !important;
-  box-shadow: none !important;
+.company-switcher__menu {
+  display: grid;
+  gap: 2px;
+  max-height: 154px;
+  margin-top: 5px;
+  padding: 4px;
+  overflow-y: auto;
+  background: rgba(36, 40, 47, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
 }
 
-.company-switcher__control option {
-  color: #101828;
-  background: #ffffff;
+.company-switcher__option {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.82);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-switcher__option:hover,
+.company-switcher__option.active {
+  color: #ffffff;
+  background: rgba(240, 92, 68, 0.24);
 }
 
 .company-switcher__meta {
-  overflow: hidden;
   color: rgba(255, 255, 255, 0.56);
   font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
   text-transform: capitalize;
 }
 
@@ -180,7 +212,7 @@
 .app-sidebar__nav {
   display: grid;
   gap: 2px;
-  overflow-y: auto;
+  overflow: visible;
   padding-right: 0;
 }
 
@@ -309,8 +341,8 @@
 .app-sidebar__footer {
   display: grid;
   gap: 8px;
-  margin-top: auto;
-  padding-top: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
 }
 
 .app-sidebar__utility {

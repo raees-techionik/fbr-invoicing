@@ -49,6 +49,13 @@ const contactItems = [
   { label: 'Email', value: 'support@techionik.com', icon: <FiMail /> },
 ];
 
+const helpCategories = [
+  { title: 'Invoicing', description: 'Create, submit, and manage invoices', term: 'invoice', icon: <FiFileText /> },
+  { title: 'FBR Integration', description: 'Tokens, sandbox, and IRIS setup', term: 'token sandbox', icon: <FiShield /> },
+  { title: 'Account & Team', description: 'Members, roles, and permissions', term: 'account', icon: <FiHelpCircle /> },
+  { title: 'Guides', description: 'Documentation and tutorials', term: 'documentation', icon: <FiBookOpen /> },
+];
+
 const searchableSections = [
   'Ask a Question',
   'Bug Report',
@@ -145,22 +152,28 @@ function Support() {
 
   return (
     <div className="support-page">
-      <header className="support-header">
-        <div>
-          <span>Help desk</span>
-          <h1>Support</h1>
-          <p>Find FBR workflow guidance, report issues, and contact Techionik support from one place.</p>
-        </div>
-
-        <div className="support-header__actions">
+      <section className="support-hero">
+        <div className="support-hero__glow" />
+        <h1>How can we help you?</h1>
+        <p>Search the knowledge base or browse categories below.</p>
+        <label className="support-search">
+          <FiSearch size={17} />
+          <input
+            type="search"
+            placeholder="Search articles, e.g. 'sandbox token expired'..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </label>
+        <div className="support-hero__actions">
           <button className="support-secondary-action" type="button" onClick={() => setSearchTerm('')}>
-            <FiRefreshCw size={16} /> Reset Search
+            <FiRefreshCw size={16} /> Reset
           </button>
           <a className="support-primary-action" href="mailto:support@techionik.com">
             <FiMail size={16} /> Email Support
           </a>
         </div>
-      </header>
+      </section>
 
       {notice && (
         <div className="support-notice">
@@ -169,43 +182,14 @@ function Support() {
         </div>
       )}
 
-      <section className="support-search-panel">
-        <div>
-          <span>How can we help?</span>
-          <h2>Search support topics</h2>
-        </div>
-        <label className="support-search">
-          <FiSearch size={17} />
-          <input
-            type="search"
-            placeholder="Search token setup, scenario ID, invoice submission..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </label>
-      </section>
-
-      <section className="support-stat-grid" aria-label="Support summary">
-        <article>
-          <FiShield />
-          <span>FBR readiness</span>
-          <strong>Settings + Sandbox</strong>
-        </article>
-        <article>
-          <FiFileText />
-          <span>Invoice help</span>
-          <strong>Creation + Upload</strong>
-        </article>
-        <article>
-          <FiMessageCircle />
-          <span>Response time</span>
-          <strong>Business hours</strong>
-        </article>
-        <article>
-          <FiBookOpen />
-          <span>Guides</span>
-          <strong>{documentationLinks.length} topics</strong>
-        </article>
+      <section className="support-category-grid" aria-label="Support categories">
+        {helpCategories.map((category) => (
+          <button type="button" className="support-help-cat" key={category.title} onClick={() => setSearchTerm(category.term)}>
+            <span className="support-help-cat__icon">{category.icon}</span>
+            <strong>{category.title}</strong>
+            <small>{category.description}</small>
+          </button>
+        ))}
       </section>
 
       {!hasSearchMatch && (
